@@ -174,5 +174,59 @@ class GridPackerTest {
         assertEquals(0, move.col)
         assertEquals(0, move.row)
     }
+
+    @Test
+    fun testPreviewDropSameSizeSwapsPositions() {
+        val phone = HomeTileItem.AppPin(id = "phone", packageName = "dialer", colSpan = 1, rowSpan = 1, col = 0, row = 0)
+        val messages = HomeTileItem.AppPin(id = "messages", packageName = "sms", colSpan = 1, rowSpan = 1, col = 1, row = 0)
+        val tiles = listOf(phone, messages)
+
+        val preview = GridPacker.previewDrop(tiles, "phone", targetCol = 1, targetRow = 0)
+        val prevPhone = preview.find { it.id == "phone" }
+        val prevMessages = preview.find { it.id == "messages" }
+
+        assertEquals(1, prevPhone?.col)
+        assertEquals(0, prevPhone?.row)
+        assertEquals(0, prevMessages?.col)
+        assertEquals(0, prevMessages?.row)
+    }
+
+    @Test
+    fun testPreviewDropSamePositionReturnsOriginal() {
+        val phone = HomeTileItem.AppPin(id = "phone", packageName = "dialer", colSpan = 1, rowSpan = 1, col = 0, row = 0)
+        val messages = HomeTileItem.AppPin(id = "messages", packageName = "sms", colSpan = 1, rowSpan = 1, col = 1, row = 0)
+        val tiles = listOf(phone, messages)
+
+        val preview = GridPacker.previewDrop(tiles, "phone", targetCol = 0, targetRow = 0)
+        val prevPhone = preview.find { it.id == "phone" }
+        val prevMessages = preview.find { it.id == "messages" }
+
+        assertEquals(0, prevPhone?.col)
+        assertEquals(0, prevPhone?.row)
+        assertEquals(1, prevMessages?.col)
+        assertEquals(0, prevMessages?.row)
+    }
+
+    @Test
+    fun testPreviewDropDifferentSizeRelocatesColliding() {
+        val p1 = HomeTileItem.AppPin(id = "p1", packageName = "p1", colSpan = 1, rowSpan = 1, col = 0, row = 0)
+        val p2 = HomeTileItem.AppPin(id = "p2", packageName = "p2", colSpan = 1, rowSpan = 1, col = 1, row = 0)
+        val w2x1 = HomeTileItem.InternalWidget(id = "w2x1", type = InternalWidgetType.NOTES, colSpan = 2, rowSpan = 1, col = 0, row = 2)
+        val tiles = listOf(p1, p2, w2x1)
+
+        val preview = GridPacker.previewDrop(tiles, "w2x1", targetCol = 0, targetRow = 0)
+        val prevW = preview.find { it.id == "w2x1" }
+        assertEquals(0, prevW?.col)
+        assertEquals(0, prevW?.row)
+
+        val prevP1 = preview.find { it.id == "p1" }
+        val prevP2 = preview.find { it.id == "p2" }
+        assertNotNull(prevP1)
+        assertNotNull(prevP2)
+        // Both p1 and p2 must have non-null, valid coordinates that don't collide with w2x1 (row 0, col 0..1)
+        assertTrue((prevP1?.row ?: 0) >= 1 || (prevP1?.col ?: 0) >= 2)
+        assertTrue((prevP2?.row ?: 0) >= 1 || (prevP2?.col ?: 0) >= 2)
+    }
 }
+
 

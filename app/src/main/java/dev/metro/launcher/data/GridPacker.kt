@@ -206,4 +206,162 @@ object GridPacker {
 
         return DropDecision.Move(draggedId, gcx, gry, toIndex)
     }
+
+    /**
+     * Applies a [DropDecision] to [list] and returns the rearranged layout.
+     * Pure in-memory transformation: non-colliding tiles preserve coordinates,
+     * collided tiles are relocated via nearest-free search, same-size items swap.
+     */
+    fun applyDecision(list: List<HomeTileItem>, decision: DropDecision): List<HomeTileItem> {
+        return when (decision) {
+            is DropDecision.Move -> {
+                val target = list.find { it.id == decision.id } ?: return list
+                val fromIndex = list.indexOfFirst { it.id == decision.id }
+                val w = target.colSpan.coerceIn(1, COLS)
+                val h = target.rowSpan.coerceAtLeast(1)
+                val c = decision.col.coerceIn(0, COLS - w)
+                val r = decision.row.coerceAtLeast(0)
+
+                val colliding = list.filter { other ->
+                    if (other.id == decision.id) return@filter false
+                    val oc = other.col ?: return@filter false
+                    val or = other.row ?: return@filter false
+                    val ow = other.colSpan.coerceIn(1, COLS)
+                    val oh = other.rowSpan.coerceAtLeast(1)
+                    c < oc + ow && c + w > oc && r < or + oh && r + h > or
+                }
+
+                val mutable = list.toMutableList()
+                val item = mutable.removeAt(fromIndex)
+                val insertIndex = decision.toIndex?.coerceIn(0, mutable.size) ?: fromIndex.coerceIn(0, mutable.size)
+                mutable.add(insertIndex, item.copyWithPosition(c, r))
+
+                if (colliding.isEmpty()) {
+                    packGrid(mutable)
+                } else {
+                    val occupied = mutableSetOf<Pair<Int, Int>>()
+                    for (yy in r until r + h) {
+                        for (xx in c until c + w) {
+                            occupied.add(Pair(xx, yy))
+                        }
+                    }
+                    val placedMap = mutableMapOf<String, Pair<Int, Int>>()
+                    placedMap[decision.id] = Pair(c, r)
+
+                    val toRelocate = colliding.toMutableList()
+                    for (other in mutable) {
+                        if (other.id == decision.id || colliding.any { it.id == other.id }) continue
+                        val oc = other.col
+                        val or = other.row
+                        if (oc != null && or != null) {
+                            val ow = other.colSpan.coerceIn(1, COLS)
+                            val oh = other.rowSpan.coerceAtLeast(1)
+                            var fits = true
+                            for (yy in or until or + oh) {
+                                for (xx in oc until oc + ow) {
+                                    if (occupied.contains(Pair(xx, yy))) {
+                                        fits = false
+                                        break
+                                    }
+                                }
+                                if (!fits) break
+                            }
+                            if (fits) {
+                                for (yy in or until or + oh) {
+                                    for (xx in oc until oc + ow) {
+                                        occupied.add(Pair(xx, yy))
+                                    }
+                                }
+                                placedMap[other.id] = Pair(oc, or)
+                            } else {
+                                toRelocate.add(other)
+                            }
+                        } else {
+                            toRelocate.add(other)
+                        }
+                    }
+
+                    for (reloc in toRelocate) {
+                        val iw = reloc.colSpan.coerceIn(1, COLS)
+                        val ih = reloc.rowSpan.coerceAtLeast(1)
+                        val startC = reloc.col ?: c
+                        val startR = reloc.row ?: r
+                        var placed = false
+                        for (ring in 0 until 60) {
+                            for (dy in -ring..ring) {
+                                val span = ring - kotlin.math.abs(dy)
+                                for (s in -span..span) {
+                                    val cx = startC + s
+                                    val cy = startR + dy
+                                    if (cx < 0 || cy < 0 || cx + iw > COLS || cy + ih > MAX_ROWS) continue
+                                    var free = true
+                                    for (yy in cy until cy + ih) {
+                                        for (xx in cx until cx + iw) {
+                                            if (occupied.contains(Pair(xx, yy))) {
+                                                free = false
+                                                break
+                                            }
+                                        }
+                                        if (!free) break
+                                    }
+                                    if (free) {
+                                        for (yy in cy until cy + ih) {
+                                            for (xx in cx until cx + iw) {
+                                                occupied.add(Pair(xx, yy))
+                                            }
+                                        }
+                                        placedMap[reloc.id] = Pair(cx, cy)
+                                        placed = true
+                                        break
+                                    }
+                                }
+                                if (placed) break
+                            }
+                            if (placed) break
+                        }
+                    }
+
+                    val updated = mutable.map { itm ->
+                        val pos = placedMap[itm.id]
+                        if (pos != null) itm.copyWithPosition(pos.first, pos.second) else itm
+                    }
+                    packGrid(updated)
+                }
+            }
+            is DropDecision.Swap -> {
+                val a = list.find { it.id == decision.idA } ?: return list
+                val b = list.find { it.id == decision.idB } ?: return list
+                val aCol = a.col ?: 0
+                val aRow = a.row ?: 0
+                val bCol = b.col ?: 0
+                val bRow = b.row ?: 0
+                val indexA = list.indexOfFirst { it.id == decision.idA }
+                val indexB = list.indexOfFirst { it.id == decision.idB }
+                val mutable = list.toMutableList()
+                mutable[indexA] = b.copyWithPosition(aCol, aRow)
+                mutable[indexB] = a.copyWithPosition(bCol, bRow)
+                packGrid(mutable)
+            }
+            DropDecision.None -> list
+        }
+    }
+
+    /**
+     * Calculates what the layout will look like if [draggedId] is dropped at (targetCol, targetRow).
+     * If the drop would be a no-op (same position) or None, returns [tiles] unchanged.
+     */
+    fun previewDrop(
+        tiles: List<HomeTileItem>,
+        draggedId: String,
+        targetCol: Int,
+        targetRow: Int,
+        toIndex: Int? = null,
+    ): List<HomeTileItem> {
+        val decision = evalDrop(tiles, draggedId, targetCol, targetRow, toIndex)
+        if (decision is DropDecision.None) return tiles
+        val applied = applyDecision(tiles, decision)
+        val appliedMap = applied.associateBy { it.id }
+        return tiles.map { original -> appliedMap[original.id] ?: original }
+    }
 }
+

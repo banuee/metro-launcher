@@ -8,11 +8,15 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -141,10 +145,17 @@ fun HomeGrid(
     val weatherPanelHeightDp = with(density) { weatherPanelHeightPx.toDp() }
     val weatherPanelOffset = if (weatherExpanded && weatherTile != null && weatherPanelHeightPx > 0f) weatherPanelHeightDp + gap else 0.dp
 
+    var previewLayout by remember { mutableStateOf<List<HomeTileItem>?>(null) }
+    var lastPreviewTarget by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var dragInitialPosition by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+
     // Сброс выделения по кнопке "Назад"
     BackHandler(enabled = selectedTileId != null || draggingTileId != null) {
         autoScrollJob?.cancel()
         autoScrollJob = null
+        previewLayout = null
+        lastPreviewTarget = null
+        dragInitialPosition = null
         selectedTileId = null
         draggingTileId = null
         dragFingerRoot = Offset.Zero
@@ -197,13 +208,16 @@ fun HomeGrid(
             val finger = (slot?.topLeft ?: Offset.Zero) + touchOffset
             dragGrabDelta = (slot?.center ?: finger) - finger
             dragFingerRoot = finger
+            dragInitialPosition = Pair(tile.col ?: 0, tile.row ?: 0)
+            previewLayout = null
+            lastPreviewTarget = null
             selectedTileId = tile.id
             draggingTileId = tile.id
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         }
 
         fun onTileDrag(dragAmount: Offset) {
-            if (draggingTileId == null) return
+            val droppedId = draggingTileId ?: return
             dragFingerRoot += dragAmount
             val grid = gridRectRoot ?: return
             val currentCenter = dragFingerRoot + dragGrabDelta
@@ -217,11 +231,63 @@ fun HomeGrid(
             if (scrollDy != 0f && autoScrollJob?.isActive != true) {
                 autoScrollJob = scope.launch { scrollState.scrollBy(scrollDy) }
             }
+
+            val current = latestTiles
+            val draggedTile = current.find { it.id == droppedId }
+            if (draggedTile != null) {
+                val w = draggedTile.colSpan.coerceIn(1, GridPacker.COLS)
+                val h = draggedTile.rowSpan.coerceAtLeast(1)
+                val tileWPx = colWidthPx * w + gapPx * (w - 1)
+                val tileHPx = rowHeightPx * h + gapPx * (h - 1)
+
+                val dropTopLeftX = currentCenter.x - tileWPx / 2f
+                val dropTopLeftY = currentCenter.y - tileHPx / 2f
+
+                val contentX = dropTopLeftX - grid.left
+                val contentY = dropTopLeftY - grid.top + scrollState.value
+
+                val extraY = if (weatherExpanded && weatherTile != null) with(density) { weatherPanelOffset.toPx() } else 0f
+                val weatherSplitY = paddingPx + (rowHeightPx + gapPx) * weatherSplitRow
+                val adjustedContentY = if (weatherExpanded && weatherTile != null && contentY > weatherSplitY) {
+                    if (contentY < weatherSplitY + extraY) weatherSplitY else contentY - extraY
+                } else {
+                    contentY
+                }
+
+                val targetCol = Math.round((contentX - paddingPx) / (colWidthPx + gapPx)).coerceIn(0, GridPacker.COLS - w)
+                val targetRow = Math.round((adjustedContentY - paddingPx) / (rowHeightPx + gapPx)).coerceAtLeast(0)
+
+                val target = Pair(targetCol, targetRow)
+                if (target != lastPreviewTarget) {
+                    lastPreviewTarget = target
+                    val initPos = dragInitialPosition
+                    if (initPos != null && targetCol == initPos.first && targetRow == initPos.second) {
+                        previewLayout = null
+                    } else {
+                        var toIdx = 0
+                        for (other in current) {
+                            if (other.id == droppedId) continue
+                            val slot = tileSlotRect(other.id) ?: continue
+                            val cx = slot.center.x
+                            val cy = slot.center.y
+                            val halfH = slot.height / 2f
+                            val before = cy + halfH <= currentCenter.y ||
+                                (kotlin.math.abs(cy - currentCenter.y) < halfH && cx < currentCenter.x)
+                            if (before) toIdx++
+                        }
+                        previewLayout = GridPacker.previewDrop(current, droppedId, targetCol, targetRow, toIdx)
+                    }
+                }
+            }
         }
 
         fun endTileDrag() {
             autoScrollJob?.cancel()
             autoScrollJob = null
+            previewLayout = null
+            lastPreviewTarget = null
+            val initPos = dragInitialPosition
+            dragInitialPosition = null
             val droppedId = draggingTileId
             draggingTileId = null
             if (droppedId != null) {
@@ -321,7 +387,8 @@ fun HomeGrid(
             dragGrabDelta = Offset.Zero
         }
 
-        val footerRow = (tiles.maxOfOrNull { (it.row ?: 0) + it.rowSpan } ?: 0)
+        val displayTiles = previewLayout ?: latestTiles
+        val footerRow = (latestTiles.maxOfOrNull { (it.row ?: 0) + it.rowSpan } ?: 0)
         val totalGridHeight = padding * 2 + (rowHeight + gap) * footerRow + (if (weatherExpanded) weatherPanelOffset else 0.dp) + 240.dp
 
         Box(
@@ -366,10 +433,47 @@ fun HomeGrid(
                         )
                     },
             ) {
+                // Drop target footprint preview indicator
+                val previewTarget = lastPreviewTarget
+                val draggedItem = if (draggingTileId != null) latestTiles.find { it.id == draggingTileId } else null
+                if (previewTarget != null && draggedItem != null && previewLayout != null) {
+                    val pCol = previewTarget.first
+                    val pRow = previewTarget.second
+                    val pColSpan = draggedItem.colSpan.coerceIn(1, 4)
+                    val pRowSpan = draggedItem.rowSpan.coerceIn(1, 6)
+                    val pIsBelowWeather = weatherExpanded && weatherTile != null && pRow >= weatherSplitRow
+                    val pRowOffsetDp = if (pIsBelowWeather) weatherPanelOffset else 0.dp
+
+                    val pXDp = padding + (colWidth + gap) * pCol
+                    val pYDp = padding + (rowHeight + gap) * pRow + pRowOffsetDp
+                    val pWidthDp = colWidth * pColSpan + gap * (pColSpan - 1)
+                    val pHeightDp = rowHeight * pRowSpan + gap * (pRowSpan - 1)
+
+                    Box(
+                        modifier = Modifier
+                            .offset(x = pXDp, y = pYDp)
+                            .size(width = pWidthDp, height = pHeightDp)
+                            .zIndex(0.5f)
+                            .border(
+                                width = 1.5.dp,
+                                color = Color.White.copy(alpha = 0.35f),
+                                shape = RoundedCornerShape(MetroDimens.radius),
+                            )
+                            .background(
+                                color = Color.White.copy(alpha = 0.08f),
+                                shape = RoundedCornerShape(MetroDimens.radius),
+                            ),
+                    )
+                }
+
                 // Отрисовка плиток
-                latestTiles.forEach { tile ->
-                    val col = tile.col ?: 0
-                    val row = tile.row ?: 0
+                displayTiles.forEach { tile ->
+                    val isSelected = selectedTileId == tile.id
+                    val isDragging = draggingTileId == tile.id
+
+                    val origPos = if (isDragging) dragInitialPosition else null
+                    val col = origPos?.first ?: (tile.col ?: 0)
+                    val row = origPos?.second ?: (tile.row ?: 0)
                     val colSpan = tile.colSpan.coerceIn(1, 4)
                     val rowSpan = tile.rowSpan.coerceIn(1, 6)
                     val isBelowWeather = weatherExpanded && weatherTile != null && row >= weatherSplitRow
@@ -400,9 +504,6 @@ fun HomeGrid(
                         animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
                         label = "h_${tile.id}",
                     )
-
-                    val isSelected = selectedTileId == tile.id
-                    val isDragging = draggingTileId == tile.id
 
                     val dragTranslation = if (isDragging) {
                         val slot = tileSlotRect(tile.id)
