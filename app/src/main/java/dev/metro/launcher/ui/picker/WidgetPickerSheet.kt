@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -169,14 +171,23 @@ fun WidgetPickerSheet(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(
-                        text = "ДОБАВИТЬ ВИДЖЕТ",
-                        color = scheme.text,
-                        fontSize = 24.sp,
-                        fontFamily = MetroFonts.headline,
-                        fontWeight = FontWeight.Light,
-                        letterSpacing = 1.sp,
-                    )
+                    Column {
+                        Text(
+                            text = "ДОБАВИТЬ ВИДЖЕТ",
+                            color = scheme.text,
+                            fontSize = 22.sp,
+                            fontFamily = MetroFonts.headline,
+                            fontWeight = FontWeight.Light,
+                            letterSpacing = 1.2.sp,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(width = 28.dp, height = 2.5.dp)
+                                .clip(RoundedCornerShape(percent = 50))
+                                .background(scheme.accent),
+                        )
+                    }
                     IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -186,51 +197,66 @@ fun WidgetPickerSheet(
                     }
                 }
 
-                        Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(14.dp))
 
-                        // Search Bar
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(44.dp)
-                                .clip(RoundedCornerShape(MetroDimens.radius))
-                                .background(Color.White.copy(alpha = 0.08f))
-                                .padding(horizontal = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = null,
-                                tint = scheme.textDim,
-                                modifier = Modifier.size(20.dp),
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            BasicTextField(
-                                value = query,
-                                onValueChange = { query = it },
-                                textStyle = TextStyle(
-                                    color = scheme.text,
+                // Search Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(MetroDimens.radius))
+                        .background(scheme.glass)
+                        .border(
+                            width = 1.dp,
+                            color = if (query.isNotEmpty()) scheme.accent else scheme.stroke,
+                            shape = RoundedCornerShape(MetroDimens.radius),
+                        )
+                        .padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = if (query.isNotEmpty()) scheme.accent else scheme.textDim,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    BasicTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        textStyle = TextStyle(
+                            color = scheme.text,
+                            fontSize = 15.sp,
+                            fontFamily = MetroFonts.text,
+                        ),
+                        cursorBrush = SolidColor(scheme.accent),
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        decorationBox = { innerTextField ->
+                            if (query.isEmpty()) {
+                                Text(
+                                    text = "Поиск виджетов…",
+                                    color = scheme.textDim,
                                     fontSize = 15.sp,
                                     fontFamily = MetroFonts.text,
-                                ),
-                                cursorBrush = SolidColor(scheme.accent),
-                                singleLine = true,
-                                modifier = Modifier.weight(1f),
-                                decorationBox = { innerTextField ->
-                                    if (query.isEmpty()) {
-                                        Text(
-                                            text = "Поиск виджетов…",
-                                            color = scheme.textDim,
-                                            fontSize = 15.sp,
-                                            fontFamily = MetroFonts.text,
-                                        )
-                                    }
-                                    innerTextField()
-                                },
+                                )
+                            }
+                            innerTextField()
+                        },
+                    )
+                    if (query.isNotEmpty()) {
+                        IconButton(onClick = { query = "" }, modifier = Modifier.size(24.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Очистить",
+                                tint = scheme.textDim,
+                                modifier = Modifier.size(16.dp),
                             )
                         }
+                    }
+                }
 
-                        Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(14.dp))
 
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
@@ -332,7 +358,8 @@ fun WidgetPickerSheet(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clip(RoundedCornerShape(MetroDimens.radius))
-                                        .background(Color.White.copy(alpha = 0.04f))
+                                        .background(scheme.glass)
+                                        .border(1.dp, scheme.stroke, RoundedCornerShape(MetroDimens.radius))
                                         .clickable {
                                             expandedApps[appItem.packageName] = !isExpanded
                                         }
@@ -410,9 +437,10 @@ fun WidgetPickerSheet(
                                                 Row(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .clip(RoundedCornerShape(8.dp))
-                                                        .background(Color.White.copy(alpha = 0.05f))
-                                                        .metroClickable {
+                                                        .clip(RoundedCornerShape(MetroDimens.radiusSmall))
+                                                        .background(Color.White.copy(alpha = 0.04f))
+                                                        .border(1.dp, scheme.stroke, RoundedCornerShape(MetroDimens.radiusSmall))
+                                                        .metroClickable(targetScale = 0.97f) {
                                                             onSelectAppWidget(widgetInfo)
                                                             onDismiss()
                                                         }
@@ -452,6 +480,12 @@ fun WidgetPickerSheet(
                                                             fontWeight = FontWeight.SemiBold,
                                                         )
                                                     }
+                                                    Icon(
+                                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                                        contentDescription = null,
+                                                        tint = scheme.textDim.copy(alpha = 0.4f),
+                                                        modifier = Modifier.size(18.dp),
+                                                    )
                                                 }
                                             }
                                         }
@@ -476,16 +510,18 @@ private fun MetroWidgetCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(MetroDimens.radius))
-            .background(Color.White.copy(alpha = 0.06f))
-            .metroClickable(onClick = onClick)
+            .background(scheme.glass)
+            .border(1.dp, scheme.stroke, RoundedCornerShape(MetroDimens.radius))
+            .metroClickable(targetScale = 0.97f, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(scheme.accent.copy(alpha = 0.2f)),
+                .size(44.dp)
+                .clip(RoundedCornerShape(MetroDimens.radiusSmall))
+                .background(scheme.accent.copy(alpha = 0.14f))
+                .border(1.dp, scheme.accent.copy(alpha = 0.35f), RoundedCornerShape(MetroDimens.radiusSmall)),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -505,6 +541,7 @@ private fun MetroWidgetCard(
                 fontFamily = MetroFonts.text,
                 fontWeight = FontWeight.Medium,
             )
+            Spacer(Modifier.height(2.dp))
             Text(
                 text = subtitle,
                 color = scheme.textDim,
@@ -512,5 +549,11 @@ private fun MetroWidgetCard(
                 fontFamily = MetroFonts.text,
             )
         }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = scheme.textDim.copy(alpha = 0.4f),
+            modifier = Modifier.size(18.dp),
+        )
     }
 }

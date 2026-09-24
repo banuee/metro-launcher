@@ -1,6 +1,7 @@
 package dev.metro.launcher.ui.picker
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,8 +15,10 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Widgets
@@ -26,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -39,9 +43,8 @@ import dev.metro.launcher.ui.theme.MetroFonts
 import dev.metro.launcher.ui.theme.metroClickable
 
 /**
- * Меню добавления на главный экран (по долгому клику на пустое место).
- * Кнопки: «Добавить виджет» и «Добавить значок».
- * Компактный размер по контенту (стиль Smart Launcher).
+ * Меню добавления на главный экран в стиле Quickshell Metro.
+ * Акриловое стекло, тонкие границы, акцентная риска и тактильный отклик плиток.
  */
 @Composable
 fun HomeAddDialog(
@@ -61,50 +64,70 @@ fun HomeAddDialog(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.45f))
+                .background(Color.Black.copy(alpha = 0.50f))
                 .clickable(onClick = onDismiss),
             contentAlignment = Alignment.BottomCenter,
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .widthIn(max = 480.dp)
                     .navigationBarsPadding()
                     .padding(horizontal = 14.dp, vertical = 14.dp)
                     .clickable(enabled = false, onClick = {})
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(Color(0xFF1E1E1E).copy(alpha = 0.96f))
-                    .padding(1.dp),
+                    .clip(RoundedCornerShape(MetroDimens.panelRadius))
+                    .background(scheme.glassDeep)
+                    .border(
+                        width = 1.dp,
+                        color = scheme.strokeStrong,
+                        shape = RoundedCornerShape(MetroDimens.panelRadius),
+                    ),
             ) {
+                // Тонкая акцентная линия подсветки сверху (как в metro-shot / metro shell)
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth(0.45f)
+                        .height(1.5.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    scheme.accent.copy(alpha = 0.75f),
+                                    Color.Transparent,
+                                ),
+                            ),
+                        ),
+                )
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                        .padding(horizontal = 18.dp, vertical = 18.dp),
                 ) {
-                    // Drag handle
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.CenterHorizontally)
-                            .size(width = 36.dp, height = 4.dp)
-                            .clip(RoundedCornerShape(percent = 50))
-                            .background(Color.White.copy(alpha = 0.3f)),
-                    )
-
-                    Spacer(Modifier.height(14.dp))
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(
-                            text = "ДОБАВИТЬ НА ЭКРАН",
-                            color = scheme.text,
-                            fontSize = 17.sp,
-                            fontFamily = MetroFonts.headline,
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = 1.sp,
-                        )
-                        IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                        Column {
+                            Text(
+                                text = "ДОБАВИТЬ НА ЭКРАН",
+                                color = scheme.text,
+                                fontSize = 16.sp,
+                                fontFamily = MetroFonts.headline,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 1.sp,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(width = 28.dp, height = 2.5.dp)
+                                    .clip(RoundedCornerShape(percent = 50))
+                                    .background(scheme.accent),
+                            )
+                        }
+                        IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = "Закрыть",
@@ -114,7 +137,7 @@ fun HomeAddDialog(
                         }
                     }
 
-                    Spacer(Modifier.height(14.dp))
+                    Spacer(Modifier.height(16.dp))
 
                     AddMenuOption(
                         icon = Icons.Default.Widgets,
@@ -138,7 +161,7 @@ fun HomeAddDialog(
                         },
                     )
 
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(6.dp))
                 }
             }
         }
@@ -157,23 +180,33 @@ private fun AddMenuOption(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(MetroDimens.radius))
-            .background(Color.White.copy(alpha = 0.06f))
-            .metroClickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .background(scheme.glass)
+            .border(
+                width = 1.dp,
+                color = scheme.stroke,
+                shape = RoundedCornerShape(MetroDimens.radius),
+            )
+            .metroClickable(targetScale = 0.97f, onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
             modifier = Modifier
-                .size(46.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(scheme.accent.copy(alpha = 0.15f)),
+                .size(44.dp)
+                .clip(RoundedCornerShape(MetroDimens.radiusSmall))
+                .background(scheme.accent.copy(alpha = 0.14f))
+                .border(
+                    width = 1.dp,
+                    color = scheme.accent.copy(alpha = 0.35f),
+                    shape = RoundedCornerShape(MetroDimens.radiusSmall),
+                ),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = scheme.accent,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(22.dp),
             )
         }
         Spacer(Modifier.width(14.dp))
@@ -181,10 +214,11 @@ private fun AddMenuOption(
             Text(
                 text = title,
                 color = scheme.text,
-                fontSize = 16.sp,
+                fontSize = 15.sp,
                 fontFamily = MetroFonts.text,
                 fontWeight = FontWeight.Medium,
             )
+            Spacer(Modifier.height(2.dp))
             Text(
                 text = subtitle,
                 color = scheme.textDim,
@@ -192,5 +226,11 @@ private fun AddMenuOption(
                 fontFamily = MetroFonts.text,
             )
         }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = scheme.textDim.copy(alpha = 0.5f),
+            modifier = Modifier.size(20.dp),
+        )
     }
 }

@@ -2,6 +2,7 @@ package dev.metro.launcher.ui.picker
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
@@ -91,7 +93,7 @@ fun AppPickerSheet(
                 modifier = Modifier
                     .fillMaxSize()
                     .systemBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
             ) {
                 // Заголовок в стиле Windows Phone Metro
                 Row(
@@ -99,14 +101,23 @@ fun AppPickerSheet(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(
-                        text = "ДОБАВИТЬ ЗНАЧОК",
-                        color = scheme.text,
-                        fontSize = 24.sp,
-                        fontFamily = MetroFonts.headline,
-                        fontWeight = FontWeight.Light,
-                        letterSpacing = 1.sp,
-                    )
+                    Column {
+                        Text(
+                            text = "ДОБАВИТЬ ЗНАЧОК",
+                            color = scheme.text,
+                            fontSize = 22.sp,
+                            fontFamily = MetroFonts.headline,
+                            fontWeight = FontWeight.Light,
+                            letterSpacing = 1.2.sp,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(width = 28.dp, height = 2.5.dp)
+                                .clip(RoundedCornerShape(percent = 50))
+                                .background(scheme.accent),
+                        )
+                    }
                     IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -122,16 +133,21 @@ fun AppPickerSheet(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(46.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color.White.copy(alpha = 0.07f))
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(MetroDimens.radius))
+                        .background(scheme.glass)
+                        .border(
+                            width = 1.dp,
+                            color = if (query.isNotEmpty()) scheme.accent else scheme.stroke,
+                            shape = RoundedCornerShape(MetroDimens.radius),
+                        )
                         .padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = null,
-                        tint = scheme.textDim,
+                        tint = if (query.isNotEmpty()) scheme.accent else scheme.textDim,
                         modifier = Modifier.size(20.dp),
                     )
                     Spacer(Modifier.width(10.dp))
@@ -175,7 +191,7 @@ fun AppPickerSheet(
                 // Список приложений
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(bottom = 24.dp),
                 ) {
                     items(filteredApps, key = { it.packageName }) { app ->
@@ -190,22 +206,40 @@ fun AppPickerSheet(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color.White.copy(alpha = 0.04f))
-                                .metroClickable {
+                                .clip(RoundedCornerShape(MetroDimens.radius))
+                                .background(scheme.glass)
+                                .border(
+                                    width = 1.dp,
+                                    color = scheme.stroke,
+                                    shape = RoundedCornerShape(MetroDimens.radius),
+                                )
+                                .metroClickable(targetScale = 0.97f) {
                                     onSelectApp(app)
                                     onDismiss()
                                 }
-                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            bitmap?.let { icon ->
-                                Image(
-                                    bitmap = icon,
-                                    contentDescription = app.label,
-                                    modifier = Modifier.size(42.dp),
-                                )
-                            } ?: Box(modifier = Modifier.size(42.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(RoundedCornerShape(MetroDimens.radiusSmall))
+                                    .background(Color.White.copy(alpha = 0.04f))
+                                    .border(
+                                        width = 1.dp,
+                                        color = scheme.stroke,
+                                        shape = RoundedCornerShape(MetroDimens.radiusSmall),
+                                    ),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                bitmap?.let { icon ->
+                                    Image(
+                                        bitmap = icon,
+                                        contentDescription = app.label,
+                                        modifier = Modifier.size(38.dp),
+                                    )
+                                }
+                            }
                             Spacer(Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
@@ -217,6 +251,7 @@ fun AppPickerSheet(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
+                                Spacer(Modifier.height(2.dp))
                                 Text(
                                     text = app.packageName,
                                     color = scheme.textDim,
@@ -226,6 +261,12 @@ fun AppPickerSheet(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = scheme.textDim.copy(alpha = 0.4f),
+                                modifier = Modifier.size(18.dp),
+                            )
                         }
                     }
                 }

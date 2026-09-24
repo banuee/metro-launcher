@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -100,6 +101,7 @@ fun BoxScope.SmartLauncherHandles(
     onDrag: (Offset) -> Unit = {},
     onEndDrag: () -> Unit = {},
 ) {
+    val scheme = LocalMetroScheme.current
     val haptic = LocalHapticFeedback.current
     val density = LocalDensity.current
     val stepX = with(density) { 45.dp.toPx() }
@@ -145,19 +147,19 @@ fun BoxScope.SmartLauncherHandles(
             },
     )
 
-    // Внешняя окантовка выделения
+    // Внешняя окантовка выделения в акцентном цвете Metro
     Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(1.dp)
             .border(
                 width = 1.5.dp,
-                color = Color.White.copy(alpha = 0.85f),
+                color = scheme.accent.copy(alpha = 0.85f),
                 shape = RoundedCornerShape(MetroDimens.radius + 1.dp),
             ),
     )
 
-    // Верхняя пилюля: видимая часть 44x8, хитбокс 64x28 для пальца.
+    // Верхняя пилюля: видимая часть 44x7, хитбокс 64x28 для пальца.
     var topDragY by remember { mutableFloatStateOf(0f) }
     Box(
         modifier = Modifier
@@ -188,9 +190,10 @@ fun BoxScope.SmartLauncherHandles(
     ) {
         Box(
             modifier = Modifier
-                .size(width = 44.dp, height = 8.dp)
+                .size(width = 44.dp, height = 7.dp)
                 .clip(RoundedCornerShape(percent = 50))
-                .background(Color.White),
+                .background(Color.White)
+                .border(1.dp, scheme.accent.copy(alpha = 0.5f), RoundedCornerShape(percent = 50)),
         )
     }
 
@@ -225,9 +228,10 @@ fun BoxScope.SmartLauncherHandles(
     ) {
         Box(
             modifier = Modifier
-                .size(width = 44.dp, height = 8.dp)
+                .size(width = 44.dp, height = 7.dp)
                 .clip(RoundedCornerShape(percent = 50))
-                .background(Color.White),
+                .background(Color.White)
+                .border(1.dp, scheme.accent.copy(alpha = 0.5f), RoundedCornerShape(percent = 50)),
         )
     }
 
@@ -262,9 +266,10 @@ fun BoxScope.SmartLauncherHandles(
     ) {
         Box(
             modifier = Modifier
-                .size(width = 8.dp, height = 44.dp)
+                .size(width = 7.dp, height = 44.dp)
                 .clip(RoundedCornerShape(percent = 50))
-                .background(Color.White),
+                .background(Color.White)
+                .border(1.dp, scheme.accent.copy(alpha = 0.5f), RoundedCornerShape(percent = 50)),
         )
     }
 
@@ -299,9 +304,10 @@ fun BoxScope.SmartLauncherHandles(
     ) {
         Box(
             modifier = Modifier
-                .size(width = 8.dp, height = 44.dp)
+                .size(width = 7.dp, height = 44.dp)
                 .clip(RoundedCornerShape(percent = 50))
-                .background(Color.White),
+                .background(Color.White)
+                .border(1.dp, scheme.accent.copy(alpha = 0.5f), RoundedCornerShape(percent = 50)),
         )
     }
 }
@@ -327,97 +333,152 @@ fun TileContextMenu(
 ) {
     val scheme = LocalMetroScheme.current
 
-    Column(
+    Box(
         modifier = modifier
             .testTag(TILE_MENU_TAG)
-            .widthIn(min = 230.dp, max = 290.dp)
-            .shadow(elevation = 16.dp, shape = RoundedCornerShape(16.dp))
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF1E1E1E).copy(alpha = 0.96f))
-            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
-            .padding(14.dp),
+            .widthIn(min = 240.dp, max = 300.dp)
+            .shadow(elevation = 16.dp, shape = RoundedCornerShape(MetroDimens.panelRadius))
+            .clip(RoundedCornerShape(MetroDimens.panelRadius))
+            .background(scheme.glassDeep)
+            .border(1.dp, scheme.strokeStrong, RoundedCornerShape(MetroDimens.panelRadius)),
     ) {
-        // Заголовок
-        Text(
-            text = tileTitle,
-            color = scheme.textDim,
-            fontSize = 13.sp,
-            fontFamily = MetroFonts.text,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(bottom = 8.dp),
+        // Тонкий акцентный блик сверху как в quickshell metro-shot
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth(0.5f)
+                .height(1.5.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            scheme.accent.copy(alpha = 0.85f),
+                            Color.Transparent,
+                        ),
+                    ),
+                ),
         )
 
-        HorizontalDivider(color = Color.White.copy(alpha = 0.08f), thickness = 1.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+        ) {
+            // Заголовок виджета / приложения
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 8.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(width = 3.dp, height = 14.dp)
+                        .clip(RoundedCornerShape(percent = 50))
+                        .background(scheme.accent),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = tileTitle,
+                    color = scheme.text,
+                    fontSize = 13.sp,
+                    fontFamily = MetroFonts.headline,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
 
-        // 1. Открыть приложение
-        if (onOpenApp != null) {
+            HorizontalDivider(color = scheme.stroke, thickness = 1.dp)
+
+            // 1. Открыть приложение
+            if (onOpenApp != null) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(MetroDimens.radiusSmall))
+                        .background(scheme.glass)
+                        .border(1.dp, scheme.stroke, RoundedCornerShape(MetroDimens.radiusSmall))
+                        .metroClickable(targetScale = 0.96f, onClick = onOpenApp)
+                        .padding(horizontal = 10.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(scheme.accent.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.OpenInNew,
+                            contentDescription = null,
+                            tint = scheme.accent,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text = "Открыть приложение",
+                        color = scheme.text,
+                        fontSize = 14.sp,
+                        fontFamily = MetroFonts.text,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // 2. Подсказка про свободное перемещение и ресайз за края
+            Text(
+                text = "Тяните плитку, чтобы переместить. Тяните за белые края, чтобы изменить размер.",
+                color = scheme.textDim,
+                fontSize = 11.5.sp,
+                lineHeight = 15.sp,
+                fontFamily = MetroFonts.text,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+            )
+
             Spacer(Modifier.height(6.dp))
+
+            HorizontalDivider(color = scheme.stroke, thickness = 1.dp)
+
+            Spacer(Modifier.height(8.dp))
+
+            // 3. Удалить виджет / значок (аутентичный Metro WP Red)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .metroClickable(onClick = onOpenApp)
-                    .padding(vertical = 8.dp, horizontal = 4.dp),
+                    .clip(RoundedCornerShape(MetroDimens.radiusSmall))
+                    .background(scheme.red.copy(alpha = 0.12f))
+                    .border(1.dp, scheme.red.copy(alpha = 0.35f), RoundedCornerShape(MetroDimens.radiusSmall))
+                    .metroClickable(targetScale = 0.96f, onClick = onDelete)
+                    .padding(horizontal = 10.dp, vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    imageVector = Icons.Default.OpenInNew,
-                    contentDescription = null,
-                    tint = scheme.text,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(Modifier.width(12.dp))
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(scheme.red.copy(alpha = 0.20f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.RemoveCircleOutline,
+                        contentDescription = null,
+                        tint = scheme.red,
+                        modifier = Modifier.size(17.dp),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
                 Text(
-                    text = "Открыть приложение",
-                    color = scheme.text,
+                    text = if (isAppPin) "Удалить значок" else "Удалить виджет",
+                    color = scheme.red,
                     fontSize = 14.sp,
                     fontFamily = MetroFonts.text,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.SemiBold,
                 )
             }
-        }
-
-        Spacer(Modifier.height(6.dp))
-
-        // 2. Подсказка про свободное перемещение и ресайз за края
-        Text(
-            text = "Тяните плитку, чтобы переместить. Тяните за белые края, чтобы изменить размер.",
-            color = scheme.textDim,
-            fontSize = 12.sp,
-            fontFamily = MetroFonts.text,
-            modifier = Modifier.padding(vertical = 4.dp, horizontal = 4.dp),
-        )
-
-        Spacer(Modifier.height(4.dp))
-
-        HorizontalDivider(color = Color.White.copy(alpha = 0.08f), thickness = 1.dp)
-
-        Spacer(Modifier.height(6.dp))
-
-        // 3. Удалить виджет / значок
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .metroClickable(onClick = onDelete)
-                .padding(vertical = 8.dp, horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = Icons.Default.RemoveCircleOutline,
-                contentDescription = null,
-                tint = Color(0xFFFF5252),
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(12.dp))
-            Text(
-                text = if (isAppPin) "Удалить значок" else "Удалить виджет",
-                color = Color(0xFFFF5252),
-                fontSize = 14.sp,
-                fontFamily = MetroFonts.text,
-                fontWeight = FontWeight.Medium,
-            )
         }
     }
 }
