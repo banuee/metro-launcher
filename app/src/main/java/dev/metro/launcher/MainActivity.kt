@@ -33,8 +33,13 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import kotlin.math.roundToInt
 import dev.metro.launcher.ui.theme.MetroAnimations
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -219,26 +224,28 @@ class MainActivity : ComponentActivity() {
                     jumpOpen = false
                 }
 
-                // Кросфейд резкий<->блюр 240мс по кривой Metro Open
+                // Размытие обоев: включено при открытой шторке, Jump Grid, настройках или кадрировании
+                val isBlurred = drawerOpen || jumpOpen || showSettings || pendingCropUri != null
                 val blurAlpha by animateFloatAsState(
-                    targetValue = if (drawerOpen || jumpOpen) 1f else 0f,
-                    animationSpec = tween(durationMillis = 240, easing = MetroAnimations.OpenEasing),
+                    targetValue = if (isBlurred) 1f else 0f,
+                    animationSpec = tween(durationMillis = 280, easing = MetroAnimations.OpenEasing),
                     label = "wp-blur",
                 )
 
-                LaunchedEffect(drawerOpen, jumpOpen, wallpaper) {
+                LaunchedEffect(isBlurred, wallpaper) {
                     if (wallpaper == null) {
                         // Живые обои: только оконный блюр, тоже с фейдом.
-                        animateWindowBlur(if (drawerOpen || jumpOpen) 80 else 0)
+                        animateWindowBlur(if (isBlurred) 80 else 0)
                     } else {
                         setWindowBlur(0)
                     }
                 }
 
-                BackHandler(enabled = showSettings) { showSettings = false }
-                BackHandler(enabled = jumpOpen && !showSettings) { jumpOpen = false }
-                BackHandler(enabled = drawerOpen && !jumpOpen && !showSettings) { closeDrawer() }
-                BackHandler(enabled = transitionState.phase != TransitionPhase.IDLE && !showSettings) {
+                BackHandler(enabled = pendingCropUri != null) { pendingCropUri = null }
+                BackHandler(enabled = showSettings && pendingCropUri == null) { showSettings = false }
+                BackHandler(enabled = jumpOpen && !showSettings && pendingCropUri == null) { jumpOpen = false }
+                BackHandler(enabled = drawerOpen && !jumpOpen && !showSettings && pendingCropUri == null) { closeDrawer() }
+                BackHandler(enabled = transitionState.phase != TransitionPhase.IDLE && !showSettings && pendingCropUri == null) {
                     transitionManager.cancelTransition()
                 }
 
@@ -270,7 +277,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         Box(Modifier.fillMaxSize().systemBarsPadding()) {
                             AnimatedVisibility(
-                                visible = !drawerOpen,
+                                visible = !drawerOpen && !showSettings && pendingCropUri == null,
                                 enter = fadeIn(animationSpec = tween(durationMillis = 220, easing = MetroAnimations.OpenEasing)),
                                 exit = fadeOut(animationSpec = tween(durationMillis = 180, easing = MetroAnimations.CloseEasing)),
                             ) {
@@ -485,21 +492,22 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                val currentCropUri = pendingCropUri
-                if (currentCropUri != null) {
-                    WallpaperCropScreen(
-                        imageUri = currentCropUri,
-                        onApply = { croppedBmp ->
-                            wpRepo.saveCroppedWallpaper(croppedBmp)
-                            pendingCropUri = null
-                        },
-                        onCancel = {
-                            pendingCropUri = null
-                        },
-                    )
-                }
-
-                if (showSettings) {
+                // Окно параметров Metro (настройки лаунчера)
+                AnimatedVisibility(
+                    visible = showSettings && pendingCropUri == null,
+                    enter = slideInVertically(
+                        initialOffsetY = { (it * 0.12f).roundToInt() },
+                        animationSpec = tween(durationMillis = 300, easing = MetroAnimations.OpenEasing),
+                    ) + fadeIn(
+                        animationSpec = tween(durationMillis = 260, easing = MetroAnimations.OpenEasing),
+                    ),
+                    exit = slideOutVertically(
+                        targetOffsetY = { (it * 0.10f).roundToInt() },
+                        animationSpec = tween(durationMillis = 220, easing = MetroAnimations.CloseEasing),
+                    ) + fadeOut(
+                        animationSpec = tween(durationMillis = 180, easing = MetroAnimations.CloseEasing),
+                    ),
+                ) {
                     MetroSettingsScreen(
                         settingsRepo = settingsRepo,
                         wallpaperRepo = wpRepo,
@@ -513,6 +521,29 @@ class MainActivity : ComponentActivity() {
                         },
                         onDismiss = { showSettings = false },
                     )
+                }
+
+                // Экран кадрирования обоев (располагается поверх настроек, открывается при выборе фото)
+                val currentCropUri = pendingCropUri
+                AnimatedVisibility(
+                    visible = currentCropUri != null,
+                    enter = fadeIn(animationSpec = tween(durationMillis = 240, easing = MetroAnimations.OpenEasing)) +
+                            scaleIn(initialScale = 0.94f, animationSpec = tween(durationMillis = 240, easing = MetroAnimations.OpenEasing)),
+                    exit = fadeOut(animationSpec = tween(durationMillis = 180, easing = MetroAnimations.CloseEasing)) +
+                            scaleOut(targetScale = 0.94f, animationSpec = tween(durationMillis = 180, easing = MetroAnimations.CloseEasing)),
+                ) {
+                    if (currentCropUri != null) {
+                        WallpaperCropScreen(
+                            imageUri = currentCropUri,
+                            onApply = { croppedBmp ->
+                                wpRepo.saveCroppedWallpaper(croppedBmp)
+                                pendingCropUri = null
+                            },
+                            onCancel = {
+                                pendingCropUri = null
+                            },
+                        )
+                    }
                 }
             }
         }

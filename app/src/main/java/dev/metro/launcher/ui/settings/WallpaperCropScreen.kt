@@ -10,6 +10,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.metro.launcher.ui.theme.LocalMetroScheme
 import dev.metro.launcher.ui.theme.MetroFonts
+import dev.metro.launcher.ui.theme.MetroIcon
 import dev.metro.launcher.ui.theme.metroClickable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -95,7 +98,12 @@ fun WallpaperCropScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(Color(0xFF0A0A0A))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {}, // Полный перехват жестов и тапов
+            ),
     ) {
         val bmp = sourceBitmap
         if (bmp != null) {
@@ -252,36 +260,53 @@ private fun CropContent(
             )
         }
 
-        // Верхняя панель заголовка
-        Column(
+        // Верхняя панель заголовка с кнопкой «Назад»
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .statusBarsPadding()
-                .padding(horizontal = 20.dp, vertical = 16.dp)
+                .padding(horizontal = 20.dp, vertical = 14.dp)
                 .align(Alignment.TopCenter),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = "КАДРИРОВАНИЕ ОБОЕВ",
-                color = scheme.text,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Light,
-                fontFamily = MetroFonts.headline,
-                letterSpacing = 1.5.sp,
-            )
-            Spacer(Modifier.height(4.dp))
             Box(
                 modifier = Modifier
-                    .width(28.dp)
-                    .height(3.dp)
-                    .background(scheme.accent, RoundedCornerShape(1.5.dp)),
-            )
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = "Масштабируйте двумя пальцами и двигайте фото под рамку экрана",
-                color = scheme.textDim,
-                fontSize = 12.sp,
-                fontFamily = MetroFonts.text,
-            )
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(scheme.glassHover)
+                    .border(1.dp, scheme.stroke, RoundedCornerShape(8.dp))
+                    .metroClickable(targetScale = 0.90f, onClick = onCancel),
+                contentAlignment = Alignment.Center,
+            ) {
+                MetroIcon(icon = "\uf060", fontSize = 15.sp, color = scheme.text)
+            }
+
+            Spacer(Modifier.width(14.dp))
+
+            Column {
+                Text(
+                    text = "КАДРИРОВАНИЕ ОБОЕВ",
+                    color = scheme.text,
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Light,
+                    fontFamily = MetroFonts.headline,
+                    letterSpacing = 1.5.sp,
+                )
+                Spacer(Modifier.height(3.dp))
+                Box(
+                    modifier = Modifier
+                        .width(28.dp)
+                        .height(3.dp)
+                        .background(scheme.accent, RoundedCornerShape(1.5.dp)),
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Масштабируйте и двигайте фото под рамку",
+                    color = scheme.textDim,
+                    fontSize = 12.sp,
+                    fontFamily = MetroFonts.text,
+                )
+            }
         }
 
         // Нижняя панель действий
