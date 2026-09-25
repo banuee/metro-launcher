@@ -20,9 +20,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+
+import android.os.Build
+import android.view.WindowManager
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.window.DialogWindowProvider
 
 /**
  * Предблюренные обои на весь экран. Плитки рисуют срез обоев 1:1 ровно под своей позицией в окне.
@@ -30,6 +37,59 @@ import androidx.compose.ui.unit.dp
  */
 val LocalBlurredWallpaper: ProvidableCompositionLocal<ImageBitmap?> =
     compositionLocalOf { null }
+
+/**
+ * Включает аппаратный блюр фона под окном диалога через SurfaceFlinger на Android 12+ (API 31+).
+ * Аналог layer_rule с blur в Hyprland для всплывающих окон и диалогов quickshell.
+ */
+@Composable
+fun DialogWindowBlurEffect(
+    blurRadiusPx: Int = 60,
+    dimAmount: Float = 0.20f,
+) {
+    val view = LocalView.current
+    androidx.compose.runtime.DisposableEffect(view) {
+        val window = (view.parent as? DialogWindowProvider)?.window
+        if (window != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_BLUR_BEHIND)
+            val lp = window.attributes
+            lp.blurBehindRadius = blurRadiusPx
+            window.attributes = lp
+            window.setDimAmount(dimAmount)
+        }
+        onDispose { }
+    }
+}
+
+/**
+ * Аппаратный RenderEffect блюр для слоев Compose на Android 12+ (API 31+).
+ * Включает boost насыщенности (vibrancy = 0.55 из Hyprland), чтобы цвета не блекли.
+ */
+fun Modifier.metroBlurEffect(
+    radiusPx: Float = 36f,
+    saturationBoost: Float = 1.24f,
+): Modifier {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || radiusPx <= 0f) {
+        return this
+    }
+    return this.graphicsLayer {
+        val blurEffect = android.graphics.RenderEffect.createBlurEffect(
+            radiusPx,
+            radiusPx,
+            android.graphics.Shader.TileMode.CLAMP,
+        )
+        val cm = android.graphics.ColorMatrix().apply {
+            setSaturation(saturationBoost)
+        }
+        val colorFilter = android.graphics.RenderEffect.createColorFilterEffect(
+            android.graphics.ColorMatrixColorFilter(cm),
+        )
+        renderEffect = android.graphics.RenderEffect.createChainEffect(
+            colorFilter,
+            blurEffect,
+        ).asComposeRenderEffect()
+    }
+}
 
 /**
  * Стеклянный бокс с фрост-подложкой: идеальный 1:1 срез блюра под своей позицией в окне.
@@ -54,7 +114,7 @@ fun FrostedGlassBox(
     Box(
         modifier = modifier
             .onGloballyPositioned { coordinates ->
-                pos = coordinates.positionInWindow()
+                pos = coordinates.positionOnScreen()
             }
             .clip(RoundedCornerShape(shape))
             .drawBehind {
@@ -82,3 +142,4 @@ fun FrostedGlassBox(
         content()
     }
 }
+

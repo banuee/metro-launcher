@@ -1,6 +1,7 @@
 package dev.metro.launcher
 
 import android.animation.ValueAnimator
+import android.app.ActivityOptions
 import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
@@ -8,6 +9,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
@@ -17,6 +19,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.lifecycleScope
+import dev.metro.launcher.ui.transition.AppTransitionManager
+import dev.metro.launcher.ui.transition.AppTransitionOverlay
+import dev.metro.launcher.ui.transition.TransitionPhase
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
@@ -27,6 +35,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import dev.metro.launcher.ui.theme.MetroAnimations
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
@@ -60,6 +69,10 @@ import dev.metro.launcher.ui.picker.WidgetPickerSheet
 import dev.metro.launcher.ui.picker.calculateWidgetSpans
 import dev.metro.launcher.ui.theme.LocalBlurredWallpaper
 import dev.metro.launcher.ui.theme.MetroTheme
+import dev.metro.launcher.data.MetroSettingsRepository
+import dev.metro.launcher.data.UpdateRepository
+import dev.metro.launcher.ui.settings.MetroSettingsScreen
+import dev.metro.launcher.ui.settings.WallpaperCropScreen
 import java.util.UUID
 
 private const val APPWIDGET_HOST_ID = 1024
@@ -68,6 +81,7 @@ class MainActivity : ComponentActivity() {
     private val vm: HomeViewModel by viewModels()
     private var blurAnim: ValueAnimator? = null
     private var wallpaperRepo: WallpaperRepository? = null
+    private val transitionManager = AppTransitionManager()
 
     private lateinit var appWidgetHost: AppWidgetHost
     private lateinit var appWidgetManager: AppWidgetManager
@@ -127,11 +141,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private var pendingCropUri by mutableStateOf<Uri?>(null)
+
     /** Свои обои через Photo Picker (разрешений не требует вообще). */
     private val pickWallpaper = registerForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri ->
-        if (uri != null) wallpaperRepo?.setCustom(uri)
+        if (uri != null) pendingCropUri = uri
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -151,9 +167,17 @@ class MainActivity : ComponentActivity() {
             Log.w("MetroLauncher", "Не удалось зарегистрировать wallpaper receiver", error)
         }
         setContent {
-            MetroTheme {
+            val context = applicationContext
+            val settingsRepo = remember { MetroSettingsRepository(context) }
+            val updateRepo = remember { UpdateRepository(context) }
+            val wpRepo = remember {
+                WallpaperRepository(context, settingsRepo).also { wallpaperRepo = it }
+            }
+
+            MetroTheme(settingsRepo = settingsRepo) {
                 val apps by vm.apps.collectAsState()
                 val tiles by vm.tiles.collectAsState()
+                val transitionState by transitionManager.state.collectAsState()
 
                 var drawerOpen by remember { mutableStateOf(false) }
                 var jumpOpen by remember { mutableStateOf(false) }
@@ -161,15 +185,12 @@ class MainActivity : ComponentActivity() {
                 var showAddMenu by remember { mutableStateOf(false) }
                 var showAppPicker by remember { mutableStateOf(false) }
                 var showWidgetPicker by remember { mutableStateOf(false) }
+                var showSettings by remember { mutableStateOf(false) }
 
                 val drawerListState = rememberLazyListState()
-                val context = applicationContext
                 val notesRepo = remember { NotesRepository(context) }
                 val weatherRepo = remember { WeatherRepository(context) }
                 val playerRepo = remember { PlayerRepository(context) }
-                val wpRepo = remember {
-                    WallpaperRepository(context).also { wallpaperRepo = it }
-                }
                 // У обоих репозиториев свои scope/таймеры и MediaController:
                 // без явного закрытия они живут дольше UI и держат ресурсы
                 // (декод обоев, опрос медиасессий) после ухода с экрана.
@@ -198,10 +219,10 @@ class MainActivity : ComponentActivity() {
                     jumpOpen = false
                 }
 
-                // Кросфейд резкий<->блюр 250мс вместо щелчка флагом.
+                // Кросфейд резкий<->блюр 240мс по кривой Metro Open
                 val blurAlpha by animateFloatAsState(
                     targetValue = if (drawerOpen || jumpOpen) 1f else 0f,
-                    animationSpec = tween(durationMillis = 250),
+                    animationSpec = tween(durationMillis = 240, easing = MetroAnimations.OpenEasing),
                     label = "wp-blur",
                 )
 
@@ -214,8 +235,12 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                BackHandler(enabled = jumpOpen) { jumpOpen = false }
-                BackHandler(enabled = drawerOpen && !jumpOpen) { closeDrawer() }
+                BackHandler(enabled = showSettings) { showSettings = false }
+                BackHandler(enabled = jumpOpen && !showSettings) { jumpOpen = false }
+                BackHandler(enabled = drawerOpen && !jumpOpen && !showSettings) { closeDrawer() }
+                BackHandler(enabled = transitionState.phase != TransitionPhase.IDLE && !showSettings) {
+                    transitionManager.cancelTransition()
+                }
 
                 // Слои обоев — строго в координатах окна (без инсетов),
                 // чтобы срезы фроста в плитках совпадали 1:1.
@@ -223,7 +248,7 @@ class MainActivity : ComponentActivity() {
                     val wp = wallpaper
                     AnimatedVisibility(
                         visible = wp != null,
-                        enter = fadeIn(animationSpec = tween(durationMillis = 400)),
+                        enter = fadeIn(animationSpec = tween(durationMillis = 350, easing = MetroAnimations.OpenEasing)),
                     ) {
                         if (wp != null) {
                             Image(
@@ -246,8 +271,8 @@ class MainActivity : ComponentActivity() {
                         Box(Modifier.fillMaxSize().systemBarsPadding()) {
                             AnimatedVisibility(
                                 visible = !drawerOpen,
-                                enter = fadeIn(),
-                                exit = fadeOut(),
+                                enter = fadeIn(animationSpec = tween(durationMillis = 220, easing = MetroAnimations.OpenEasing)),
+                                exit = fadeOut(animationSpec = tween(durationMillis = 180, easing = MetroAnimations.CloseEasing)),
                             ) {
                                 HomeGrid(
                                     tiles = tiles,
@@ -257,9 +282,14 @@ class MainActivity : ComponentActivity() {
                                     playerRepo = playerRepo,
                                     appWidgetHost = appWidgetHost,
                                     appWidgetManager = appWidgetManager,
-                                    onAppClick = { app -> vm.launch(app) },
+                                    onAppClick = { app, bounds ->
+                                        transitionManager.launchApp(this@MainActivity, app, bounds)
+                                    },
+                                    onRegisterFindTileRect = { finder ->
+                                        transitionManager.findTileRect = finder
+                                    },
                                     onOpenDrawer = { drawerOpen = true },
-                                    onClockClick = {
+                                    onClockClick = { bounds ->
                                         val clockApp = apps.find {
                                             it.packageName == "com.google.android.deskclock" ||
                                                 it.packageName == "com.android.deskclock" ||
@@ -267,28 +297,30 @@ class MainActivity : ComponentActivity() {
                                                 it.packageName.contains("clock", ignoreCase = true)
                                         }
                                         if (clockApp != null) {
-                                            vm.launch(clockApp)
+                                            transitionManager.launchApp(this@MainActivity, clockApp, bounds)
                                         } else {
                                             try {
                                                 val intent = Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS)
                                                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                startActivity(intent)
+                                                val options = ActivityOptions.makeCustomAnimation(this@MainActivity, 0, 0)
+                                                startActivity(intent, options.toBundle())
                                             } catch (_: Exception) {}
                                         }
                                     },
-                                    onCalendarClick = {
+                                    onCalendarClick = { bounds ->
                                         val calendarApp = apps.find {
                                             it.packageName == "com.google.android.calendar" ||
                                                 it.packageName == "com.android.calendar" ||
                                                 it.packageName.contains("calendar", ignoreCase = true)
                                         }
                                         if (calendarApp != null) {
-                                            vm.launch(calendarApp)
+                                            transitionManager.launchApp(this@MainActivity, calendarApp, bounds)
                                         } else {
                                             try {
                                                 val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_CALENDAR)
                                                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                                startActivity(intent)
+                                                val options = ActivityOptions.makeCustomAnimation(this@MainActivity, 0, 0)
+                                                startActivity(intent, options.toBundle())
                                             } catch (_: Exception) {}
                                         }
                                     },
@@ -338,9 +370,12 @@ class MainActivity : ComponentActivity() {
                                         listState = drawerListState,
                                         jumpOpen = jumpOpen,
                                         onJumpOpenChange = { jumpOpen = it },
-                                        onAppClick = { app ->
-                                            closeDrawer()
-                                            vm.launch(app)
+                                        onAppClick = { app, bounds ->
+                                            transitionManager.launchApp(this@MainActivity, app, bounds)
+                                            lifecycleScope.launch {
+                                                delay(400)
+                                                closeDrawer()
+                                            }
                                         },
                                         onPickWallpaper = {
                                             try {
@@ -352,14 +387,23 @@ class MainActivity : ComponentActivity() {
                                             } catch (_: Exception) {
                                             }
                                         },
+                                        onOpenSettings = {
+                                            showSettings = true
+                                            closeDrawer()
+                                        },
                                     )
                                 }
                             }
                         }
                     }
+
+                    AppTransitionOverlay(
+                        transitionState = transitionState,
+                        onFinished = { transitionManager.onTransitionFinished() },
+                    )
                 }
 
-                // Меню долгого нажатия на пустое место: Добавить виджет / Добавить значок
+                // Меню долгого нажатия на пустое место: Добавить виджет / Добавить значок / Параметры
                 if (showAddMenu) {
                     HomeAddDialog(
                         onAddWidgetClick = {
@@ -369,6 +413,10 @@ class MainActivity : ComponentActivity() {
                         onAddAppClick = {
                             showAddMenu = false
                             showAppPicker = true
+                        },
+                        onSettingsClick = {
+                            showAddMenu = false
+                            showSettings = true
                         },
                         onDismiss = {
                             showAddMenu = false
@@ -436,8 +484,42 @@ class MainActivity : ComponentActivity() {
                         },
                     )
                 }
+
+                val currentCropUri = pendingCropUri
+                if (currentCropUri != null) {
+                    WallpaperCropScreen(
+                        imageUri = currentCropUri,
+                        onApply = { croppedBmp ->
+                            wpRepo.saveCroppedWallpaper(croppedBmp)
+                            pendingCropUri = null
+                        },
+                        onCancel = {
+                            pendingCropUri = null
+                        },
+                    )
+                }
+
+                if (showSettings) {
+                    MetroSettingsScreen(
+                        settingsRepo = settingsRepo,
+                        wallpaperRepo = wpRepo,
+                        updateRepo = updateRepo,
+                        onPickWallpaper = {
+                            try {
+                                pickWallpaper.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                )
+                            } catch (_: Exception) {}
+                        },
+                        onDismiss = { showSettings = false },
+                    )
+                }
             }
         }
+    }
+
+    override fun onRestart() {
+        super.onRestart()
     }
 
     override fun onStart() {
@@ -450,6 +532,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
+        transitionManager.onStop()
         try {
             appWidgetHost.stopListening()
         } catch (_: Exception) {
@@ -515,11 +598,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        vm.refresh()
-        wallpaperRepo?.reload()
+        transitionManager.onResume()
+        lifecycleScope.launch {
+            delay(350)
+            vm.refresh()
+        }
     }
 
     override fun onDestroy() {
+        transitionManager.cancelTransition()
         runCatching {
             unregisterReceiver(wallpaperReceiver)
         }.onFailure { error ->

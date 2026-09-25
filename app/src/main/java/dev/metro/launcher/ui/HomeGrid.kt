@@ -3,10 +3,17 @@ package dev.metro.launcher.ui
 import android.appwidget.AppWidgetHost
 import android.appwidget.AppWidgetManager
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import dev.metro.launcher.ui.theme.MetroAnimations
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,6 +35,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -104,10 +112,11 @@ fun HomeGrid(
     playerRepo: PlayerRepository,
     appWidgetHost: AppWidgetHost,
     appWidgetManager: AppWidgetManager,
-    onAppClick: (AppInfo) -> Unit,
+    onAppClick: (AppInfo, Rect?) -> Unit,
     onOpenDrawer: () -> Unit,
-    onClockClick: () -> Unit,
-    onCalendarClick: () -> Unit,
+    onClockClick: (Rect?) -> Unit = { },
+    onCalendarClick: (Rect?) -> Unit = { },
+    onRegisterFindTileRect: ((packageName: String) -> Rect?) -> Unit = { },
     onUpdateTileSpan: (id: String, colSpan: Int, rowSpan: Int) -> Unit,
     onMoveTile: (id: String, toIndex: Int) -> Unit = { _, _ -> },
     onDeleteTile: (id: String) -> Unit,
@@ -143,7 +152,15 @@ fun HomeGrid(
     val weatherSplitRow = weatherRow + weatherRowSpan
     var weatherPanelHeightPx by remember { mutableStateOf(with(density) { 540.dp.toPx() }) }
     val weatherPanelHeightDp = with(density) { weatherPanelHeightPx.toDp() }
-    val weatherPanelOffset = if (weatherExpanded && weatherTile != null && weatherPanelHeightPx > 0f) weatherPanelHeightDp + gap else 0.dp
+    val targetWeatherOffset = if (weatherExpanded && weatherTile != null && weatherPanelHeightPx > 0f) weatherPanelHeightDp + gap else 0.dp
+    val weatherPanelOffset by animateDpAsState(
+        targetValue = targetWeatherOffset,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "weather_offset",
+    )
 
     var previewLayout by remember { mutableStateOf<List<HomeTileItem>?>(null) }
     var lastPreviewTarget by remember { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -192,7 +209,7 @@ fun HomeGrid(
             val r = tile.row ?: 0
             val cs = tile.colSpan.coerceIn(1, 4)
             val rs = tile.rowSpan.coerceAtLeast(1)
-            val isBelow = weatherExpanded && weatherTile != null && r >= weatherSplitRow
+            val isBelow = weatherTile != null && r >= weatherSplitRow
             val extraY = if (isBelow) with(density) { weatherPanelOffset.toPx() } else 0f
 
             val x = grid.left + paddingPx + c * (colWidthPx + gapPx)
@@ -200,6 +217,17 @@ fun HomeGrid(
             val w = colWidthPx * cs + gapPx * (cs - 1)
             val h = rowHeightPx * rs + gapPx * (rs - 1)
             return Rect(Offset(x, y), Size(w, h))
+        }
+
+        LaunchedEffect(latestTiles, gridRectRoot, colWidthPx, rowHeightPx, scrollState.value, weatherExpanded) {
+            onRegisterFindTileRect { pkg ->
+                val tile = latestTiles.find {
+                    (it is HomeTileItem.AppPin && it.packageName == pkg) ||
+                    (it is HomeTileItem.InternalWidget && it.type == InternalWidgetType.CLOCK && (pkg.contains("clock", ignoreCase = true) || pkg.contains("deskclock", ignoreCase = true))) ||
+                    (it is HomeTileItem.AndroidWidget && it.packageName == pkg)
+                }
+                tile?.let { tileSlotRect(it.id) }
+            }
         }
 
         fun startTileDrag(tile: HomeTileItem, touchOffset: Offset) {
@@ -246,9 +274,9 @@ fun HomeGrid(
                 val contentX = dropTopLeftX - grid.left
                 val contentY = dropTopLeftY - grid.top + scrollState.value
 
-                val extraY = if (weatherExpanded && weatherTile != null) with(density) { weatherPanelOffset.toPx() } else 0f
+                val extraY = if (weatherTile != null) with(density) { weatherPanelOffset.toPx() } else 0f
                 val weatherSplitY = paddingPx + (rowHeightPx + gapPx) * weatherSplitRow
-                val adjustedContentY = if (weatherExpanded && weatherTile != null && contentY > weatherSplitY) {
+                val adjustedContentY = if (weatherTile != null && contentY > weatherSplitY) {
                     if (contentY < weatherSplitY + extraY) weatherSplitY else contentY - extraY
                 } else {
                     contentY
@@ -311,9 +339,9 @@ fun HomeGrid(
                     val contentCenterY = dropCenter.y - grid.top + scrollState.value
 
                     val targetCol = Math.round((contentX - paddingPx) / (colWidthPx + gapPx))
-                    val extraY = if (weatherExpanded && weatherTile != null) with(density) { weatherPanelOffset.toPx() } else 0f
+                    val extraY = if (weatherTile != null) with(density) { weatherPanelOffset.toPx() } else 0f
                     val weatherSplitY = paddingPx + (rowHeightPx + gapPx) * weatherSplitRow
-                    val adjustedContentY = if (weatherExpanded && weatherTile != null && contentY > weatherSplitY) {
+                    val adjustedContentY = if (weatherTile != null && contentY > weatherSplitY) {
                         if (contentY < weatherSplitY + extraY) weatherSplitY else contentY - extraY
                     } else {
                         contentY
@@ -389,7 +417,7 @@ fun HomeGrid(
 
         val displayTiles = previewLayout ?: latestTiles
         val footerRow = (latestTiles.maxOfOrNull { (it.row ?: 0) + it.rowSpan } ?: 0)
-        val totalGridHeight = padding * 2 + (rowHeight + gap) * footerRow + (if (weatherExpanded) weatherPanelOffset else 0.dp) + 240.dp
+        val totalGridHeight = padding * 2 + (rowHeight + gap) * footerRow + weatherPanelOffset + 240.dp
 
         Box(
             modifier = Modifier
@@ -408,12 +436,12 @@ fun HomeGrid(
                                 if (selectedTileId == null) {
                                     val touchX = touchOffset.x
                                     val touchY = touchOffset.y
-                                    val extraY = if (weatherExpanded && weatherTile != null) with(density) { weatherPanelOffset.toPx() } else 0f
+                                    val extraY = if (weatherTile != null) with(density) { weatherPanelOffset.toPx() } else 0f
                                     val weatherSplitY = paddingPx + (rowHeightPx + gapPx) * weatherSplitRow
-                                    if (weatherExpanded && weatherTile != null && touchY >= weatherSplitY && touchY < weatherSplitY + extraY) {
+                                    if (weatherPanelOffset > 10.dp && touchY >= weatherSplitY && touchY < weatherSplitY + extraY) {
                                         return@detectTapGestures
                                     }
-                                    val adjustedTouchY = if (weatherExpanded && weatherTile != null && touchY >= weatherSplitY + extraY) {
+                                    val adjustedTouchY = if (weatherTile != null && touchY >= weatherSplitY + extraY) {
                                         touchY - extraY
                                     } else {
                                         touchY
@@ -441,7 +469,7 @@ fun HomeGrid(
                     val pRow = previewTarget.second
                     val pColSpan = draggedItem.colSpan.coerceIn(1, 4)
                     val pRowSpan = draggedItem.rowSpan.coerceIn(1, 6)
-                    val pIsBelowWeather = weatherExpanded && weatherTile != null && pRow >= weatherSplitRow
+                    val pIsBelowWeather = weatherTile != null && pRow >= weatherSplitRow
                     val pRowOffsetDp = if (pIsBelowWeather) weatherPanelOffset else 0.dp
 
                     val pXDp = padding + (colWidth + gap) * pCol
@@ -476,7 +504,7 @@ fun HomeGrid(
                     val row = origPos?.second ?: (tile.row ?: 0)
                     val colSpan = tile.colSpan.coerceIn(1, 4)
                     val rowSpan = tile.rowSpan.coerceIn(1, 6)
-                    val isBelowWeather = weatherExpanded && weatherTile != null && row >= weatherSplitRow
+                    val isBelowWeather = weatherTile != null && row >= weatherSplitRow
                     val rowOffsetDp = if (isBelowWeather) weatherPanelOffset else 0.dp
 
                     val targetXDp = padding + (colWidth + gap) * col
@@ -541,8 +569,8 @@ fun HomeGrid(
                                 when (tile.type) {
                                     InternalWidgetType.CLOCK -> {
                                         ClockTile(
-                                            onClickClock = onClockClick,
-                                            onClickCalendar = onCalendarClick,
+                                            onClickClock = { onClockClick(tileSlotRect(tile.id)) },
+                                            onClickCalendar = { onCalendarClick(tileSlotRect(tile.id)) },
                                             height = animatedHeight,
                                             onLongPress = { selectedTileId = tile.id },
                                         )
@@ -591,7 +619,7 @@ fun HomeGrid(
                                 }
                                 AppTile(
                                     app = app,
-                                    onClick = { onAppClick(app) },
+                                    onClick = { onAppClick(app, tileSlotRect(tile.id)) },
                                     height = animatedHeight,
                                     colSpan = colSpan,
                                     rowSpan = rowSpan,
@@ -664,7 +692,7 @@ fun HomeGrid(
                                         if (app != null) {
                                             {
                                                 selectedTileId = null
-                                                onAppClick(app)
+                                                onAppClick(app, tileSlotRect(tile.id))
                                             }
                                         } else null
                                     }
@@ -672,7 +700,7 @@ fun HomeGrid(
                                         InternalWidgetType.CLOCK -> {
                                             {
                                                 selectedTileId = null
-                                                onClockClick()
+                                                onClockClick(tileSlotRect(tile.id))
                                             }
                                         }
                                         InternalWidgetType.WEATHER -> {
@@ -689,9 +717,14 @@ fun HomeGrid(
                                         if (launchIntent != null) {
                                             {
                                                 selectedTileId = null
-                                                try {
-                                                    context.startActivity(launchIntent)
-                                                } catch (_: Exception) {}
+                                                val app = apps.find { it.packageName == tile.packageName }
+                                                if (app != null) {
+                                                    onAppClick(app, tileSlotRect(tile.id))
+                                                } else {
+                                                    try {
+                                                        context.startActivity(launchIntent)
+                                                    } catch (_: Exception) {}
+                                                }
                                             }
                                         } else null
                                     }
@@ -712,19 +745,40 @@ fun HomeGrid(
                 }
 
                 // Панель погоды раскрывается строго под плиткой погоды
-                if (weatherExpanded && weatherTile != null) {
-                    val panelTopY = padding + (rowHeight + gap) * weatherSplitRow
+                val panelTopY = padding + (rowHeight + gap) * weatherSplitRow
+                AnimatedVisibility(
+                    visible = weatherExpanded && weatherTile != null,
+                    modifier = Modifier
+                        .offset(x = padding, y = panelTopY)
+                        .width(contentWidth)
+                        .zIndex(10f),
+                    enter = expandVertically(
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
+                        expandFrom = Alignment.Top,
+                    ) + fadeIn(
+                        animationSpec = tween(durationMillis = 200, easing = MetroAnimations.OpenEasing),
+                    ),
+                    exit = shrinkVertically(
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
+                        shrinkTowards = Alignment.Top,
+                    ) + fadeOut(
+                        animationSpec = tween(durationMillis = 180, easing = MetroAnimations.CloseEasing),
+                    ),
+                ) {
                     Box(
                         modifier = Modifier
-                            .offset(x = padding, y = panelTopY)
-                            .width(contentWidth)
-                            .zIndex(10f)
+                            .fillMaxWidth()
                             .onSizeChanged { size ->
                                 if (size.height > 0) {
                                     weatherPanelHeightPx = size.height.toFloat()
                                 }
-                            }
-                            .animateContentSize(),
+                            },
                     ) {
                         WeatherExpandedPanel(repo = weatherRepo, ui = weatherUi)
                     }
@@ -735,7 +789,7 @@ fun HomeGrid(
                     modifier = Modifier
                         .offset(
                             x = padding,
-                            y = padding + (rowHeight + gap) * footerRow + (if (weatherExpanded) weatherPanelOffset else 0.dp),
+                            y = padding + (rowHeight + gap) * footerRow + weatherPanelOffset,
                         )
                         .fillMaxWidth()
                         .height(180.dp)

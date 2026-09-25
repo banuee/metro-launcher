@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,12 +41,14 @@ data class MetroScheme(
     val accent: Color,
     val glass: Color = Color.White.copy(alpha = 0.07f),
     val glassHover: Color = Color.White.copy(alpha = 0.12f),
-    val glassDeep: Color = Color(0xFF141414).copy(alpha = 0.90f),
+    val glassDeep: Color = Color(0xFF101010).copy(alpha = 0.35f),
     val stroke: Color = Color.White.copy(alpha = 0.08f),
     val strokeStrong: Color = Color.White.copy(alpha = 0.15f),
     val text: Color = Color(0xFFF7F7F7),
     val textDim: Color = Color.White.copy(alpha = 0.60f),
     val red: Color = Color(0xFFE51400),
+    val blurEnabled: Boolean = true,
+    val blurRadius: Int = 14,
 )
 
 val LocalMetroScheme: ProvidableCompositionLocal<MetroScheme> =
@@ -87,9 +90,34 @@ fun rememberWallpaperAccent(): MutableState<Color> {
 }
 
 @Composable
-fun MetroTheme(content: @Composable () -> Unit) {
-    val accent = rememberWallpaperAccent()
-    val scheme = MetroScheme(accent = accent.value)
+fun MetroTheme(
+    settingsRepo: dev.metro.launcher.data.MetroSettingsRepository? = null,
+    content: @Composable () -> Unit,
+) {
+    val wpAccent = rememberWallpaperAccent()
+    val settingsState = settingsRepo?.settings?.collectAsState()
+    val settings = settingsState?.value ?: dev.metro.launcher.data.MetroSettingsRepository.DEFAULT
+
+    val effectiveAccent = remember(settings.accentColor, settings.autoAccent, wpAccent.value) {
+        if (!settings.autoAccent && settings.accentColor != null) {
+            Color(settings.accentColor)
+        } else if (settings.accentColor != null) {
+            Color(settings.accentColor)
+        } else {
+            wpAccent.value
+        }
+    }
+
+    val scheme = MetroScheme(
+        accent = effectiveAccent,
+        glass = Color.White.copy(alpha = settings.glassAlpha),
+        glassHover = Color.White.copy(alpha = (settings.glassAlpha * 1.8f).coerceAtMost(0.40f)),
+        glassDeep = Color(0xFF101010).copy(alpha = settings.glassDeepAlpha),
+        stroke = Color.White.copy(alpha = settings.strokeAlpha),
+        strokeStrong = Color.White.copy(alpha = (settings.strokeAlpha * 1.8f).coerceAtMost(0.50f)),
+        blurEnabled = settings.blurEnabled,
+        blurRadius = settings.blurRadius,
+    )
     androidx.compose.runtime.CompositionLocalProvider(
         LocalMetroScheme provides scheme,
     ) {

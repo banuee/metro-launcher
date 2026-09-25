@@ -49,7 +49,10 @@ data class DeviceWallpaper(
  * не нужно разрешение), затем попытка системных (срабатывает на старых
  * API / если повезло), иначе null = прозрачное окно.
  */
-class WallpaperRepository(context: Context) {
+class WallpaperRepository(
+    context: Context,
+    private val settingsRepo: MetroSettingsRepository? = null,
+) {
     private val app = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val askedKey = booleanPreferencesKey("picker_asked")
@@ -65,6 +68,19 @@ class WallpaperRepository(context: Context) {
 
     init {
         reload()
+        if (settingsRepo != null) {
+            scope.launch {
+                var prevRadius = settingsRepo.settings.value.blurRadius
+                var prevEnabled = settingsRepo.settings.value.blurEnabled
+                settingsRepo.settings.collect { s ->
+                    if (s.blurRadius != prevRadius || s.blurEnabled != prevEnabled) {
+                        prevRadius = s.blurRadius
+                        prevEnabled = s.blurEnabled
+                        reload()
+                    }
+                }
+            }
+        }
     }
 
     fun reload() {
@@ -98,6 +114,39 @@ class WallpaperRepository(context: Context) {
      */
     suspend fun suppressPickerPromptForTests() {
         app.wallpaperStore.edit { it[askedKey] = true }
+    }
+
+    /** Сохранить кадрированное изображение как обои лаунчера и обновить палитру. */
+    fun saveCroppedWallpaper(bitmap: Bitmap) {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                try {
+                    app.openFileOutput("launcher_wallpaper.jpg", Context.MODE_PRIVATE).use { output ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 95, output)
+                    }
+                    Log.d("MetroLauncher", "wallpaper: cropped image saved")
+                } catch (e: Exception) {
+                    Log.e("MetroLauncher", "wallpaper: crop save failed: ${e.message}")
+                }
+            }
+            val palette = ColorPaletteExtractor.extractPalette(bitmap)
+            settingsRepo?.setGeneratedPalette(palette)
+            if (settingsRepo?.settings?.value?.autoAccent == true && palette.isNotEmpty()) {
+                settingsRepo.setAccentColor(palette.first(), auto = true)
+            }
+            reload()
+        }
+    }
+
+    /** Сбросить кастомные обои и вернуться к системным. */
+    fun resetToSystemWallpaper() {
+        scope.launch {
+            withContext(Dispatchers.IO) {
+                val f = customFile()
+                if (f.exists()) f.delete()
+            }
+            reload()
+        }
     }
 
     /** Сохранить выбранную в пикере картинку как обои лаунчера. */
@@ -140,6 +189,13 @@ class WallpaperRepository(context: Context) {
             // утилизировать НЕчего, ownership передан.
             val bmp = centerCrop(src, sw, sh) ?: return null
             src = null
+            if (settingsRepo != null && settingsRepo.settings.value.generatedPalette.isEmpty()) {
+                val palette = ColorPaletteExtractor.extractPalette(bmp)
+                settingsRepo.setGeneratedPalette(palette)
+                if (settingsRepo.settings.value.autoAccent && palette.isNotEmpty()) {
+                    settingsRepo.setAccentColor(palette.first(), auto = true)
+                }
+            }
             DeviceWallpaper(bmp.asImageBitmap(), blurBitmap(bmp, sw, sh).asImageBitmap())
         } catch (e: OutOfMemoryError) {
             Log.d("MetroLauncher", "wallpaper: custom OOM, fallback")
@@ -175,6 +231,13 @@ class WallpaperRepository(context: Context) {
             return null
         }
         Log.d("MetroLauncher", "wallpaper: system ${bmp.width}x${bmp.height}")
+        if (settingsRepo != null && settingsRepo.settings.value.generatedPalette.isEmpty()) {
+            val palette = ColorPaletteExtractor.extractPalette(bmp)
+            settingsRepo.setGeneratedPalette(palette)
+            if (settingsRepo.settings.value.autoAccent && palette.isNotEmpty()) {
+                settingsRepo.setAccentColor(palette.first(), auto = true)
+            }
+        }
         return try {
             DeviceWallpaper(
                 sharp = bmp.asImageBitmap(),
@@ -265,25 +328,63 @@ class WallpaperRepository(context: Context) {
         }
     }
 
-    /** Высококачественный StackBlur без артефактов и полос. */
+    /**
+     * Акриловый блюр, согласованный с параметрами Hyprland quickshell
+     * (passes = 2, size = 3, vibrancy = 0.55, contrast = 0.85).
+     */
     private fun blurBitmap(src: Bitmap, sw: Int, sh: Int): Bitmap {
-        val scaleFactor = 4
+        val blurEnabled = settingsRepo?.settings?.value?.blurEnabled ?: true
+        val targetRadius = if (blurEnabled) (settingsRepo?.settings?.value?.blurRadius ?: 14) else 1
+        val scaleFactor = 2
         val w = (sw / scaleFactor).coerceAtLeast(1)
         val h = (sh / scaleFactor).coerceAtLeast(1)
         val small = Bitmap.createScaledBitmap(src, w, h, true)
         val blurredSmall = try {
-            stackBlur(small, 24)
+            stackBlur(small, targetRadius)
         } catch (e: Exception) {
             if (small !== src) small.recycle()
             throw e
         }
-        // stackBlur копирует битмап; если вдруг вернул сам small — не recycle.
         if (blurredSmall !== small) small.recycle()
-        return try {
-            Bitmap.createScaledBitmap(blurredSmall, sw, sh, true)
-        } finally {
+
+        // Применяем цветовую коррекцию Hyprland (vibrancy + soft contrast)
+        val filteredSmall = try {
+            val f = applyHyprlandColorFilter(blurredSmall)
             if (blurredSmall !== src) blurredSmall.recycle()
+            f
+        } catch (_: Exception) {
+            blurredSmall
         }
+
+        return try {
+            Bitmap.createScaledBitmap(filteredSmall, sw, sh, true)
+        } finally {
+            if (filteredSmall !== src) filteredSmall.recycle()
+        }
+    }
+
+    private fun applyHyprlandColorFilter(bitmap: Bitmap): Bitmap {
+        val result = Bitmap.createBitmap(bitmap.width, bitmap.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(result)
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG or android.graphics.Paint.FILTER_BITMAP_FLAG)
+
+        // Hyprland: vibrancy 0.55 (boost saturation), contrast 0.85
+        val cm = android.graphics.ColorMatrix()
+        cm.setSaturation(1.25f)
+
+        val contrast = 0.90f
+        val translate = (1f - contrast) * 128f
+        val contrastCm = android.graphics.ColorMatrix(floatArrayOf(
+            contrast, 0f, 0f, 0f, translate,
+            0f, contrast, 0f, 0f, translate,
+            0f, 0f, contrast, 0f, translate,
+            0f, 0f, 0f, 1f, 0f,
+        ))
+        cm.postConcat(contrastCm)
+
+        paint.colorFilter = android.graphics.ColorMatrixColorFilter(cm)
+        canvas.drawBitmap(bitmap, 0f, 0f, paint)
+        return result
     }
 
     private fun stackBlur(sentBitmap: Bitmap, radius: Int): Bitmap {

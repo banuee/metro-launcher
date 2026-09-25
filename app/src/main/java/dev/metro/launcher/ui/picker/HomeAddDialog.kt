@@ -1,5 +1,7 @@
 package dev.metro.launcher.ui.picker
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,42 +19,55 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Widgets
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import dev.metro.launcher.ui.theme.DialogWindowBlurEffect
+import dev.metro.launcher.ui.theme.FrostedGlassBox
 import dev.metro.launcher.ui.theme.LocalMetroScheme
+import dev.metro.launcher.ui.theme.MetroAnimations
 import dev.metro.launcher.ui.theme.MetroDimens
 import dev.metro.launcher.ui.theme.MetroFonts
+import dev.metro.launcher.ui.theme.MetroIcon
+import dev.metro.launcher.ui.theme.MetroIcons
 import dev.metro.launcher.ui.theme.metroClickable
 
 /**
  * Меню добавления на главный экран в стиле Quickshell Metro.
- * Акриловое стекло, тонкие границы, акцентная риска и тактильный отклик плиток.
+ * Акриловое стекло, аппаратный блюр фона, Nerd Font иконки и живой отклик.
  */
 @Composable
 fun HomeAddDialog(
     onAddWidgetClick: () -> Unit,
     onAddAppClick: () -> Unit,
+    onSettingsClick: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val scheme = LocalMetroScheme.current
+    val density = LocalDensity.current
+
+    val anim = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        anim.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 240, easing = MetroAnimations.OpenEasing),
+        )
+    }
+    val slidePx = with(density) { 48.dp.toPx() }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -61,27 +76,34 @@ fun HomeAddDialog(
             decorFitsSystemWindows = false,
         ),
     ) {
+        // Аппаратный блюр SurfaceFlinger за окном диалога (Android 12+)
+        DialogWindowBlurEffect(blurRadiusPx = 65, dimAmount = 0.20f)
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.50f))
+                .background(Color.Black.copy(alpha = 0.20f * anim.value))
                 .clickable(onClick = onDismiss),
             contentAlignment = Alignment.BottomCenter,
         ) {
-            Box(
+            FrostedGlassBox(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 480.dp)
+                    .graphicsLayer {
+                        val p = anim.value
+                        scaleX = 0.92f + 0.08f * p
+                        scaleY = 0.92f + 0.08f * p
+                        alpha = p.coerceIn(0f, 1f)
+                        translationY = (1f - p) * slidePx
+                    }
                     .navigationBarsPadding()
                     .padding(horizontal = 14.dp, vertical = 14.dp)
-                    .clickable(enabled = false, onClick = {})
-                    .clip(RoundedCornerShape(MetroDimens.panelRadius))
-                    .background(scheme.glassDeep)
-                    .border(
-                        width = 1.dp,
-                        color = scheme.strokeStrong,
-                        shape = RoundedCornerShape(MetroDimens.panelRadius),
-                    ),
+                    .clickable(enabled = false, onClick = {}),
+                shape = MetroDimens.panelRadius,
+                tint = scheme.glassDeep,
+                borderColor = scheme.strokeStrong,
+                borderWidth = 1.dp,
             ) {
                 // Тонкая акцентная линия подсветки сверху (как в metro-shot / metro shell)
                 Box(
@@ -128,11 +150,10 @@ fun HomeAddDialog(
                             )
                         }
                         IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Закрыть",
-                                tint = scheme.textDim,
-                                modifier = Modifier.size(18.dp),
+                            MetroIcon(
+                                icon = MetroIcons.Close,
+                                color = scheme.textDim,
+                                fontSize = 16.sp,
                             )
                         }
                     }
@@ -140,7 +161,7 @@ fun HomeAddDialog(
                     Spacer(Modifier.height(16.dp))
 
                     AddMenuOption(
-                        icon = Icons.Default.Widgets,
+                        icon = MetroIcons.Widgets,
                         title = "Добавить виджет",
                         subtitle = "Виджеты Metro или виджеты приложений",
                         onClick = {
@@ -152,12 +173,24 @@ fun HomeAddDialog(
                     Spacer(Modifier.height(10.dp))
 
                     AddMenuOption(
-                        icon = Icons.Default.Apps,
+                        icon = MetroIcons.Apps,
                         title = "Добавить значок",
                         subtitle = "Ярлык любого установленного приложения",
                         onClick = {
                             onDismiss()
                             onAddAppClick()
+                        },
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+
+                    AddMenuOption(
+                        icon = MetroIcons.Settings,
+                        title = "Параметры",
+                        subtitle = "Обои, цвета, блюр и обновления",
+                        onClick = {
+                            onDismiss()
+                            onSettingsClick()
                         },
                     )
 
@@ -170,7 +203,7 @@ fun HomeAddDialog(
 
 @Composable
 private fun AddMenuOption(
-    icon: ImageVector,
+    icon: String,
     title: String,
     subtitle: String,
     onClick: () -> Unit,
@@ -202,11 +235,10 @@ private fun AddMenuOption(
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = scheme.accent,
-                modifier = Modifier.size(22.dp),
+            MetroIcon(
+                icon = icon,
+                color = scheme.accent,
+                fontSize = 20.sp,
             )
         }
         Spacer(Modifier.width(14.dp))
@@ -226,11 +258,10 @@ private fun AddMenuOption(
                 fontFamily = MetroFonts.text,
             )
         }
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            tint = scheme.textDim.copy(alpha = 0.5f),
-            modifier = Modifier.size(20.dp),
+        MetroIcon(
+            icon = MetroIcons.ChevronRight,
+            color = scheme.textDim.copy(alpha = 0.5f),
+            fontSize = 15.sp,
         )
     }
 }

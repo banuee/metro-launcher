@@ -20,9 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.Icon
+import dev.metro.launcher.ui.theme.MetroIcon
+import dev.metro.launcher.ui.theme.MetroIcons
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -139,11 +138,10 @@ fun NotesTile(
                         },
                     )
                 }
-                Text(
-                    text = "+",
+                MetroIcon(
+                    icon = MetroIcons.Plus,
                     color = scheme.textDim,
-                    fontSize = 18.sp,
-                    fontFamily = MetroFonts.text,
+                    fontSize = 14.sp,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .metroClickable(targetScale = 0.85f) { submit() }
@@ -192,11 +190,10 @@ private fun NoteRow(
             contentAlignment = Alignment.Center,
         ) {
             if (note.done) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(11.dp),
+                MetroIcon(
+                    icon = MetroIcons.Check,
+                    color = Color.White,
+                    fontSize = 10.sp,
                 )
             }
         }

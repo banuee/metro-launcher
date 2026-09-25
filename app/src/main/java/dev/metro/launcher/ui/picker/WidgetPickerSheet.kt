@@ -28,13 +28,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Icon
+import dev.metro.launcher.ui.theme.DialogWindowBlurEffect
+import dev.metro.launcher.ui.theme.FrostedGlassBox
+import dev.metro.launcher.ui.theme.LocalMetroScheme
+import dev.metro.launcher.ui.theme.MetroDimens
+import dev.metro.launcher.ui.theme.MetroFonts
+import dev.metro.launcher.ui.theme.MetroIcon
+import dev.metro.launcher.ui.theme.MetroIcons
+import dev.metro.launcher.ui.theme.metroClickable
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -61,11 +62,6 @@ import androidx.compose.ui.window.DialogProperties
 import dev.metro.launcher.data.AppIconLoader
 import dev.metro.launcher.data.AppInfo
 import dev.metro.launcher.data.InternalWidgetType
-import dev.metro.launcher.ui.theme.FrostedGlassBox
-import dev.metro.launcher.ui.theme.LocalMetroScheme
-import dev.metro.launcher.ui.theme.MetroDimens
-import dev.metro.launcher.ui.theme.MetroFonts
-import dev.metro.launcher.ui.theme.metroClickable
 
 data class AppWithWidgets(
     val packageName: String,
@@ -153,11 +149,13 @@ fun WidgetPickerSheet(
             decorFitsSystemWindows = false,
         ),
     ) {
+        // Аппаратный блюр окна SurfaceFlinger на Android 12+
+        DialogWindowBlurEffect(blurRadiusPx = 65, dimAmount = 0.20f)
+
         FrostedGlassBox(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF101010).copy(alpha = 0.94f)),
-            tint = Color.Transparent,
+            modifier = Modifier.fillMaxSize(),
+            shape = 0.dp,
+            tint = scheme.glassDeep,
         ) {
             Column(
                 modifier = Modifier
@@ -189,10 +187,10 @@ fun WidgetPickerSheet(
                         )
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Закрыть",
-                            tint = scheme.text,
+                        MetroIcon(
+                            icon = MetroIcons.Close,
+                            color = scheme.text,
+                            fontSize = 16.sp,
                         )
                     }
                 }
@@ -214,11 +212,10 @@ fun WidgetPickerSheet(
                         .padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        tint = if (query.isNotEmpty()) scheme.accent else scheme.textDim,
-                        modifier = Modifier.size(20.dp),
+                    MetroIcon(
+                        icon = MetroIcons.Search,
+                        color = if (query.isNotEmpty()) scheme.accent else scheme.textDim,
+                        fontSize = 16.sp,
                     )
                     Spacer(Modifier.width(10.dp))
                     BasicTextField(
@@ -246,11 +243,10 @@ fun WidgetPickerSheet(
                     )
                     if (query.isNotEmpty()) {
                         IconButton(onClick = { query = "" }, modifier = Modifier.size(24.dp)) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Очистить",
-                                tint = scheme.textDim,
-                                modifier = Modifier.size(16.dp),
+                            MetroIcon(
+                                icon = MetroIcons.Close,
+                                color = scheme.textDim,
+                                fontSize = 14.sp,
                             )
                         }
                     }
@@ -402,10 +398,10 @@ fun WidgetPickerSheet(
                                                 fontFamily = MetroFonts.text,
                                             )
                                         }
-                                        Icon(
-                                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                            contentDescription = null,
-                                            tint = scheme.textDim,
+                                        MetroIcon(
+                                            icon = if (isExpanded) MetroIcons.ChevronUp else MetroIcons.ChevronDown,
+                                            color = scheme.textDim,
+                                            fontSize = 14.sp,
                                         )
                                     }
 
@@ -480,11 +476,10 @@ fun WidgetPickerSheet(
                                                             fontWeight = FontWeight.SemiBold,
                                                         )
                                                     }
-                                                    Icon(
-                                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                                        contentDescription = null,
-                                                        tint = scheme.textDim.copy(alpha = 0.4f),
-                                                        modifier = Modifier.size(18.dp),
+                                                    MetroIcon(
+                                                        icon = MetroIcons.ChevronRight,
+                                                        color = scheme.textDim.copy(alpha = 0.4f),
+                                                        fontSize = 14.sp,
                                                     )
                                                 }
                                             }
@@ -549,11 +544,10 @@ private fun MetroWidgetCard(
                 fontFamily = MetroFonts.text,
             )
         }
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            tint = scheme.textDim.copy(alpha = 0.4f),
-            modifier = Modifier.size(18.dp),
+        MetroIcon(
+            icon = MetroIcons.ChevronRight,
+            color = scheme.textDim.copy(alpha = 0.4f),
+            fontSize = 14.sp,
         )
     }
 }

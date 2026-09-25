@@ -5,8 +5,12 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import dev.metro.launcher.ui.theme.MetroAnimations
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -49,6 +53,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import dev.metro.launcher.data.AppIconLoader
 import dev.metro.launcher.data.AppInfo
 import dev.metro.launcher.data.DrawerItem
@@ -56,7 +62,10 @@ import dev.metro.launcher.data.JumpAlphabets
 import dev.metro.launcher.data.sectionApps
 import dev.metro.launcher.ui.theme.FrostedGlassBox
 import dev.metro.launcher.ui.theme.LocalMetroScheme
+import dev.metro.launcher.ui.theme.MetroDimens
 import dev.metro.launcher.ui.theme.MetroFonts
+import dev.metro.launcher.ui.theme.MetroIcon
+import dev.metro.launcher.ui.theme.MetroIcons
 import dev.metro.launcher.ui.theme.metroClickable
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -72,8 +81,9 @@ fun DrawerScreen(
     listState: LazyListState,
     jumpOpen: Boolean,
     onJumpOpenChange: (Boolean) -> Unit,
-    onAppClick: (AppInfo) -> Unit,
+    onAppClick: (AppInfo, androidx.compose.ui.geometry.Rect?) -> Unit,
     onPickWallpaper: () -> Unit,
+    onOpenSettings: () -> Unit = {},
 ) {
     val scheme = LocalMetroScheme.current
     val scope = rememberCoroutineScope()
@@ -87,7 +97,7 @@ fun DrawerScreen(
 
     val drawerBlur by animateDpAsState(
         targetValue = if (jumpOpen) 18.dp else 0.dp,
-        animationSpec = tween(durationMillis = 220),
+        animationSpec = tween(durationMillis = 220, easing = MetroAnimations.OpenEasing),
         label = "drawer-blur",
     )
 
@@ -112,40 +122,59 @@ fun DrawerScreen(
                             )
                             is DrawerItem.Row -> AppRow(
                                 app = item.app,
-                                onClick = { onAppClick(item.app) },
+                                onClick = { bounds -> onAppClick(item.app, bounds) },
                             )
                         }
                     }
                     item {
                         Text(
-                            text = "Сменить обои лаунчера",
+                            text = "Параметры лаунчера",
                             color = scheme.textDim,
                             fontSize = 13.sp,
                             fontFamily = MetroFonts.text,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .metroClickable(targetScale = 0.96f, onClick = onPickWallpaper)
+                                .metroClickable(targetScale = 0.96f, onClick = onOpenSettings)
                                 .padding(vertical = 16.dp),
                         )
                     }
                 }
-                // Sticky: список прокручивается под строкой поиска.
-                MetroSearchBar(
-                    query = query,
-                    onQuery = { query = it },
+                // Sticky: поиск и кнопка параметров.
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 8.dp)
                         .align(Alignment.TopCenter),
-                )
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    MetroSearchBar(
+                        query = query,
+                        onQuery = { query = it },
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    FrostedGlassBox(
+                        modifier = Modifier
+                            .size(52.dp)
+                            .metroClickable(targetScale = 0.92f, onClick = onOpenSettings),
+                        tint = scheme.glassHover,
+                        borderColor = scheme.stroke,
+                    ) {
+                        MetroIcon(
+                            icon = MetroIcons.Settings,
+                            color = scheme.text,
+                            fontSize = 18.sp,
+                        )
+                    }
+                }
             }
         }
 
         AnimatedVisibility(
             visible = jumpOpen,
-            enter = fadeIn(animationSpec = tween(durationMillis = 200)),
-            exit = fadeOut(animationSpec = tween(durationMillis = 200)),
+            enter = fadeIn(animationSpec = tween(durationMillis = 200, easing = MetroAnimations.OpenEasing)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 180, easing = MetroAnimations.CloseEasing)),
         ) {
             JumpGrid(
                 available = sectioned.headerIndex.keys,
@@ -192,7 +221,11 @@ private fun MetroSearchBar(
             modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Loupe(color = if (focused) scheme.accent else scheme.textDim)
+            MetroIcon(
+                icon = MetroIcons.Search,
+                color = if (focused) scheme.accent else scheme.textDim,
+                fontSize = 16.sp,
+            )
             Spacer(Modifier.width(12.dp))
             Box(Modifier.weight(1f)) {
                 BasicTextField(
@@ -221,34 +254,21 @@ private fun MetroSearchBar(
                 )
             }
             if (query.isNotEmpty()) {
-                Text(
-                    text = "×",
-                    color = scheme.textDim,
-                    fontSize = 22.sp,
-                    fontFamily = MetroFonts.text,
+                Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .metroClickable(targetScale = 0.85f) { onQuery("") }
-                        .padding(horizontal = 8.dp),
-                )
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    MetroIcon(
+                        icon = MetroIcons.Close,
+                        color = scheme.textDim,
+                        fontSize = 14.sp,
+                    )
+                }
             }
         }
-    }
-}
-
-/** Лупа контуром (иконочного шрифта нет — рисуем канвой). */
-@Composable
-private fun Loupe(color: Color) {
-    Canvas(Modifier.size(18.dp)) {
-        val r = size.minDimension * 0.32f
-        val c = Offset(size.width * 0.42f, size.height * 0.42f)
-        drawCircle(color, r, c, style = Stroke(width = size.minDimension * 0.11f))
-        val edge = c + Offset(r * 0.707f, r * 0.707f)
-        drawLine(
-            color, edge,
-            Offset(size.width * 0.88f, size.height * 0.88f),
-            strokeWidth = size.minDimension * 0.13f,
-        )
     }
 }
 
@@ -287,7 +307,7 @@ private fun LetterHeader(
 @Composable
 private fun AppRow(
     app: AppInfo,
-    onClick: () -> Unit,
+    onClick: (androidx.compose.ui.geometry.Rect?) -> Unit,
 ) {
     val scheme = LocalMetroScheme.current
     val context = LocalContext.current
@@ -300,11 +320,13 @@ private fun AppRow(
     ) {
         value = AppIconLoader.loadAppIcon(context, app.packageName, app)
     }
+    var rowBounds by remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .metroClickable(targetScale = 0.96f, onClick = onClick)
+            .onGloballyPositioned { rowBounds = it.boundsInWindow() }
+            .metroClickable(targetScale = 0.96f, onClick = { onClick(rowBounds) })
             .padding(vertical = 6.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -329,7 +351,7 @@ private fun AppRow(
 }
 
 /**
- * Jump Grid на весь экран: матовый фрост + затемнение поверх размытого списка приложений.
+ * Jump Grid на весь экран: матовый фрост + акриловые плитки букв алфавита.
  * Буквы крупно, с тактильным откликом при нажатии.
  */
 @Composable
@@ -339,16 +361,15 @@ private fun JumpGrid(
     onDismiss: () -> Unit,
 ) {
     val scheme = LocalMetroScheme.current
-    FrostedGlassBox(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .clickable(onClick = onDismiss),
-        shape = 0.dp,
-        tint = Color.Black.copy(alpha = 0.65f),
+            .clickable(onClick = onDismiss)
+            .background(Color.Black.copy(alpha = 0.55f)),
         contentAlignment = Alignment.Center,
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 24.dp),
+            modifier = Modifier.padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             val letters = JumpAlphabets.all
@@ -361,7 +382,14 @@ private fun JumpGrid(
                         val has = available.contains(letter)
                         Box(
                             modifier = Modifier
-                                .size(52.dp)
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(MetroDimens.radiusSmall))
+                                .background(if (has) scheme.accent.copy(alpha = 0.22f) else scheme.glass)
+                                .border(
+                                    width = 1.dp,
+                                    color = if (has) scheme.accent.copy(alpha = 0.55f) else scheme.stroke,
+                                    shape = RoundedCornerShape(MetroDimens.radiusSmall),
+                                )
                                 .metroClickable(
                                     enabled = has,
                                     targetScale = 0.88f,
@@ -372,10 +400,10 @@ private fun JumpGrid(
                             Text(
                                 letter,
                                 color = if (has) scheme.text
-                                else scheme.textDim.copy(alpha = 0.35f),
-                                fontSize = 28.sp,
+                                else scheme.textDim.copy(alpha = 0.25f),
+                                fontSize = 22.sp,
                                 fontFamily = MetroFonts.headline,
-                                fontWeight = FontWeight.Light,
+                                fontWeight = if (has) FontWeight.Normal else FontWeight.Light,
                             )
                         }
                     }

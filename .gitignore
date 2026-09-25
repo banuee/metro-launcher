@@ -11,3 +11,13 @@ local/
 *.ap_
 *.aab
 *.apk
+
+# Development & AI
+AGENTS.md
+graphify-out/
+.gemini/
+scratch/
+
+# Secrets
+*.keystore
+github_token

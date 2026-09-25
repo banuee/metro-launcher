@@ -20,11 +20,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,7 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -49,14 +43,18 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.metro.launcher.data.AppIconLoader
 import dev.metro.launcher.data.AppInfo
+import dev.metro.launcher.ui.theme.DialogWindowBlurEffect
 import dev.metro.launcher.ui.theme.FrostedGlassBox
 import dev.metro.launcher.ui.theme.LocalMetroScheme
 import dev.metro.launcher.ui.theme.MetroDimens
 import dev.metro.launcher.ui.theme.MetroFonts
+import dev.metro.launcher.ui.theme.MetroIcon
+import dev.metro.launcher.ui.theme.MetroIcons
 import dev.metro.launcher.ui.theme.metroClickable
 
 /**
  * Диалог выбора приложения для добавления на главный экран (полный Metro-стиль).
+ * Прозрачный акриловый фрост, аппаратный блюр фона и Nerd Font иконки.
  */
 @Composable
 fun AppPickerSheet(
@@ -83,11 +81,13 @@ fun AppPickerSheet(
             decorFitsSystemWindows = false,
         ),
     ) {
+        // Аппаратный блюр окна SurfaceFlinger на Android 12+
+        DialogWindowBlurEffect(blurRadiusPx = 65, dimAmount = 0.20f)
+
         FrostedGlassBox(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0xFF101010).copy(alpha = 0.94f)),
-            tint = Color.Transparent,
+            modifier = Modifier.fillMaxSize(),
+            shape = 0.dp,
+            tint = scheme.glassDeep,
         ) {
             Column(
                 modifier = Modifier
@@ -119,10 +119,10 @@ fun AppPickerSheet(
                         )
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Закрыть",
-                            tint = scheme.text,
+                        MetroIcon(
+                            icon = MetroIcons.Close,
+                            color = scheme.text,
+                            fontSize = 16.sp,
                         )
                     }
                 }
@@ -144,11 +144,10 @@ fun AppPickerSheet(
                         .padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                        tint = if (query.isNotEmpty()) scheme.accent else scheme.textDim,
-                        modifier = Modifier.size(20.dp),
+                    MetroIcon(
+                        icon = MetroIcons.Search,
+                        color = if (query.isNotEmpty()) scheme.accent else scheme.textDim,
+                        fontSize = 16.sp,
                     )
                     Spacer(Modifier.width(10.dp))
                     BasicTextField(
@@ -176,11 +175,10 @@ fun AppPickerSheet(
                     )
                     if (query.isNotEmpty()) {
                         IconButton(onClick = { query = "" }, modifier = Modifier.size(24.dp)) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Очистить",
-                                tint = scheme.textDim,
-                                modifier = Modifier.size(16.dp),
+                            MetroIcon(
+                                icon = MetroIcons.Close,
+                                color = scheme.textDim,
+                                fontSize = 14.sp,
                             )
                         }
                     }
@@ -203,6 +201,7 @@ fun AppPickerSheet(
                         ) {
                             value = AppIconLoader.loadAppIcon(context, app.packageName, app)
                         }
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -213,30 +212,24 @@ fun AppPickerSheet(
                                     color = scheme.stroke,
                                     shape = RoundedCornerShape(MetroDimens.radius),
                                 )
-                                .metroClickable(targetScale = 0.97f) {
+                                .metroClickable(targetScale = 0.98f) {
                                     onSelectApp(app)
-                                    onDismiss()
                                 }
                                 .padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(46.dp)
+                                    .size(44.dp)
                                     .clip(RoundedCornerShape(MetroDimens.radiusSmall))
-                                    .background(Color.White.copy(alpha = 0.04f))
-                                    .border(
-                                        width = 1.dp,
-                                        color = scheme.stroke,
-                                        shape = RoundedCornerShape(MetroDimens.radiusSmall),
-                                    ),
+                                    .background(scheme.glassHover),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 bitmap?.let { icon ->
                                     Image(
                                         bitmap = icon,
                                         contentDescription = app.label,
-                                        modifier = Modifier.size(38.dp),
+                                        modifier = Modifier.size(36.dp),
                                     )
                                 }
                             }
@@ -261,11 +254,10 @@ fun AppPickerSheet(
                                     overflow = TextOverflow.Ellipsis,
                                 )
                             }
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = null,
-                                tint = scheme.textDim.copy(alpha = 0.4f),
-                                modifier = Modifier.size(18.dp),
+                            MetroIcon(
+                                icon = MetroIcons.ChevronRight,
+                                color = scheme.textDim.copy(alpha = 0.4f),
+                                fontSize = 14.sp,
                             )
                         }
                     }

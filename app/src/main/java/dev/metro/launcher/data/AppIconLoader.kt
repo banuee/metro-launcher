@@ -67,10 +67,21 @@ object AppIconLoader {
 
     fun cachedAppIcon(packageName: String, app: AppInfo? = null): ImageBitmap? {
         val key = appKey(packageName)
-        return synchronized(lock) {
-            val sourceMatches = app?.icon == null || appSources[key]?.get() === app.icon
-            if (sourceMatches) appCache.get(key) ?: defaultAppIconBitmap else defaultAppIconBitmap
+        synchronized(lock) {
+            val cached = appCache.get(key)
+            if (cached != null) return cached
         }
+        val icon = app?.icon
+        if (icon != null) {
+            val bmp = runCatching { icon.toImageBitmap(APP_ICON_SIZE) }.getOrNull()
+            if (bmp != null) {
+                synchronized(lock) {
+                    appCache.put(key, bmp)
+                }
+                return bmp
+            }
+        }
+        return synchronized(lock) { defaultAppIconBitmap }
     }
 
     suspend fun loadAppIcon(

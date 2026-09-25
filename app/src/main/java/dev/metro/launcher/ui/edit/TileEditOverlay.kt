@@ -1,6 +1,8 @@
 package dev.metro.launcher.ui.edit
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -36,11 +38,18 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.graphicsLayer
+import dev.metro.launcher.ui.theme.FrostedGlassBox
+import dev.metro.launcher.ui.theme.MetroAnimations
+import dev.metro.launcher.ui.theme.MetroIcon
+import dev.metro.launcher.ui.theme.MetroIcons
+import dev.metro.launcher.ui.theme.metroBlurEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -107,6 +116,14 @@ fun BoxScope.SmartLauncherHandles(
     val stepX = with(density) { 45.dp.toPx() }
     val stepY = with(density) { 45.dp.toPx() }
 
+    val handlesAnim = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        handlesAnim.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 200, easing = MetroAnimations.OpenEasing),
+        )
+    }
+
     // Актуальные колбэки и спаны без перезапуска детекторов жестов на каждой
     // рекомпозиции: иначе первый же ресайз пересоздаёт pill под пальцем и
     // обрывает жест — за одно тягание получался бы только один шаг.
@@ -117,14 +134,6 @@ fun BoxScope.SmartLauncherHandles(
     val latestSpans by rememberUpdatedState(colSpan to rowSpan)
 
     // Поглощение нажатий и распознавание свободного 2D перетаскивания по телу плитки.
-    // Press гасим сразу на down (а не на слопе): иначе вертикальный жест
-    // перехватывает nested-scroll сетки раньше слопа детектора — в режиме
-    // редактирования плитку вообще нельзя было тянуть строго вверх/вниз,
-    // сетка просто скроллилась. Гашение down также отменяет tap детей под
-    // оверлеем (тап по выбранной плитке больше не открывает приложение)
-    // и разоружает скролл для жестов с пилюль: они down не гасят, оверлей
-    // под ними — да. Старт drag'а по-прежнему на слопе, чтобы тап не дёргал
-    // меню и scale.
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -147,10 +156,16 @@ fun BoxScope.SmartLauncherHandles(
             },
     )
 
-    // Внешняя окантовка выделения в акцентном цвете Metro
+    // Внешняя окантовка выделения в акцентном цвете Metro с анимацией появления
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .graphicsLayer {
+                val p = handlesAnim.value
+                scaleX = 0.88f + 0.12f * p
+                scaleY = 0.88f + 0.12f * p
+                alpha = p.coerceIn(0f, 1f)
+            }
             .padding(1.dp)
             .border(
                 width = 1.5.dp,
@@ -167,6 +182,12 @@ fun BoxScope.SmartLauncherHandles(
             .offset(y = (-4).dp)
             .size(width = 64.dp, height = 28.dp)
             .testTag(RESIZE_TOP_TAG)
+            .graphicsLayer {
+                val p = handlesAnim.value
+                scaleX = 0.80f + 0.20f * p
+                scaleY = 0.80f + 0.20f * p
+                alpha = p.coerceIn(0f, 1f)
+            }
             .pointerInput(Unit) {
                 detectVerticalDragGestures(
                     onDragEnd = { topDragY = 0f },
@@ -192,8 +213,8 @@ fun BoxScope.SmartLauncherHandles(
             modifier = Modifier
                 .size(width = 44.dp, height = 7.dp)
                 .clip(RoundedCornerShape(percent = 50))
-                .background(Color.White)
-                .border(1.dp, scheme.accent.copy(alpha = 0.5f), RoundedCornerShape(percent = 50)),
+                .background(Color(0xFFE8E8E8).copy(alpha = 0.92f))
+                .border(1.dp, scheme.accent.copy(alpha = 0.70f), RoundedCornerShape(percent = 50)),
         )
     }
 
@@ -205,6 +226,12 @@ fun BoxScope.SmartLauncherHandles(
             .offset(y = 4.dp)
             .size(width = 64.dp, height = 28.dp)
             .testTag(RESIZE_BOTTOM_TAG)
+            .graphicsLayer {
+                val p = handlesAnim.value
+                scaleX = 0.80f + 0.20f * p
+                scaleY = 0.80f + 0.20f * p
+                alpha = p.coerceIn(0f, 1f)
+            }
             .pointerInput(Unit) {
                 detectVerticalDragGestures(
                     onDragEnd = { bottomDragY = 0f },
@@ -230,8 +257,8 @@ fun BoxScope.SmartLauncherHandles(
             modifier = Modifier
                 .size(width = 44.dp, height = 7.dp)
                 .clip(RoundedCornerShape(percent = 50))
-                .background(Color.White)
-                .border(1.dp, scheme.accent.copy(alpha = 0.5f), RoundedCornerShape(percent = 50)),
+                .background(Color(0xFFE8E8E8).copy(alpha = 0.92f))
+                .border(1.dp, scheme.accent.copy(alpha = 0.70f), RoundedCornerShape(percent = 50)),
         )
     }
 
@@ -243,6 +270,12 @@ fun BoxScope.SmartLauncherHandles(
             .offset(x = (-4).dp)
             .size(width = 28.dp, height = 64.dp)
             .testTag(RESIZE_LEFT_TAG)
+            .graphicsLayer {
+                val p = handlesAnim.value
+                scaleX = 0.80f + 0.20f * p
+                scaleY = 0.80f + 0.20f * p
+                alpha = p.coerceIn(0f, 1f)
+            }
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onDragEnd = { leftDragX = 0f },
@@ -268,8 +301,8 @@ fun BoxScope.SmartLauncherHandles(
             modifier = Modifier
                 .size(width = 7.dp, height = 44.dp)
                 .clip(RoundedCornerShape(percent = 50))
-                .background(Color.White)
-                .border(1.dp, scheme.accent.copy(alpha = 0.5f), RoundedCornerShape(percent = 50)),
+                .background(Color(0xFFE8E8E8).copy(alpha = 0.92f))
+                .border(1.dp, scheme.accent.copy(alpha = 0.70f), RoundedCornerShape(percent = 50)),
         )
     }
 
@@ -281,6 +314,12 @@ fun BoxScope.SmartLauncherHandles(
             .offset(x = 4.dp)
             .size(width = 28.dp, height = 64.dp)
             .testTag(RESIZE_RIGHT_TAG)
+            .graphicsLayer {
+                val p = handlesAnim.value
+                scaleX = 0.80f + 0.20f * p
+                scaleY = 0.80f + 0.20f * p
+                alpha = p.coerceIn(0f, 1f)
+            }
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onDragEnd = { rightDragX = 0f },
@@ -306,8 +345,8 @@ fun BoxScope.SmartLauncherHandles(
             modifier = Modifier
                 .size(width = 7.dp, height = 44.dp)
                 .clip(RoundedCornerShape(percent = 50))
-                .background(Color.White)
-                .border(1.dp, scheme.accent.copy(alpha = 0.5f), RoundedCornerShape(percent = 50)),
+                .background(Color(0xFFE8E8E8).copy(alpha = 0.92f))
+                .border(1.dp, scheme.accent.copy(alpha = 0.70f), RoundedCornerShape(percent = 50)),
         )
     }
 }
@@ -332,15 +371,35 @@ fun TileContextMenu(
     modifier: Modifier = Modifier,
 ) {
     val scheme = LocalMetroScheme.current
+    val density = LocalDensity.current
 
-    Box(
+    // Snappy Hyprland popin 70% animation
+    val anim = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        anim.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 220, easing = MetroAnimations.OpenEasing),
+        )
+    }
+
+    val slidePx = with(density) { 8.dp.toPx() }
+
+    FrostedGlassBox(
         modifier = modifier
             .testTag(TILE_MENU_TAG)
+            .graphicsLayer {
+                val p = anim.value
+                scaleX = 0.70f + 0.30f * p
+                scaleY = 0.70f + 0.30f * p
+                alpha = p.coerceIn(0f, 1f)
+                translationY = (1f - p) * slidePx
+            }
             .widthIn(min = 240.dp, max = 300.dp)
-            .shadow(elevation = 16.dp, shape = RoundedCornerShape(MetroDimens.panelRadius))
-            .clip(RoundedCornerShape(MetroDimens.panelRadius))
-            .background(scheme.glassDeep)
-            .border(1.dp, scheme.strokeStrong, RoundedCornerShape(MetroDimens.panelRadius)),
+            .shadow(elevation = 16.dp, shape = RoundedCornerShape(MetroDimens.panelRadius)),
+        shape = MetroDimens.panelRadius,
+        tint = scheme.glassDeep,
+        borderColor = scheme.strokeStrong,
+        borderWidth = 1.dp,
     ) {
         // Тонкий акцентный блик сверху как в quickshell metro-shot
         Box(
@@ -409,11 +468,10 @@ fun TileContextMenu(
                             .background(scheme.accent.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.OpenInNew,
-                            contentDescription = null,
-                            tint = scheme.accent,
-                            modifier = Modifier.size(16.dp),
+                        MetroIcon(
+                            icon = MetroIcons.ExternalLink,
+                            color = scheme.accent,
+                            fontSize = 15.sp,
                         )
                     }
                     Spacer(Modifier.width(10.dp))
@@ -431,7 +489,7 @@ fun TileContextMenu(
 
             // 2. Подсказка про свободное перемещение и ресайз за края
             Text(
-                text = "Тяните плитку, чтобы переместить. Тяните за белые края, чтобы изменить размер.",
+                text = "Тяните плитку, чтобы переместить. Тяните за края, чтобы изменить размер.",
                 color = scheme.textDim,
                 fontSize = 11.5.sp,
                 lineHeight = 15.sp,
@@ -463,11 +521,10 @@ fun TileContextMenu(
                         .background(scheme.red.copy(alpha = 0.20f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.RemoveCircleOutline,
-                        contentDescription = null,
-                        tint = scheme.red,
-                        modifier = Modifier.size(17.dp),
+                    MetroIcon(
+                        icon = MetroIcons.Trash,
+                        color = scheme.red,
+                        fontSize = 16.sp,
                     )
                 }
                 Spacer(Modifier.width(10.dp))
