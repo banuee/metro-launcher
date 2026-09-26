@@ -30,6 +30,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -139,15 +141,18 @@ fun TileFrame(
  * Тактильный клик-модификатор для элементов списков и кнопок (AppRow, заголовки, плеер).
  * Дает упругий отскок при быстром тапе и плавное сжатие при зажатии.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun Modifier.metroClickable(
     enabled: Boolean = true,
     targetScale: Float = 0.95f,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ): Modifier {
     val scope = rememberCoroutineScope()
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
+    val haptic = LocalHapticFeedback.current
 
     val pulse = remember { Animatable(1f) }
     val heldScale by animateFloatAsState(
@@ -159,23 +164,50 @@ fun Modifier.metroClickable(
 
     return this
         .graphicsLayer(scaleX = scale, scaleY = scale)
-        .clickable(
-            interactionSource = interaction,
-            indication = null,
-            enabled = enabled,
-        ) {
-            scope.launch {
-                pulse.animateTo(targetScale, tween(60, easing = FastOutSlowInEasing))
-                pulse.animateTo(
-                    1f,
-                    spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMediumLow,
-                    ),
+        .then(
+            if (onLongClick != null) {
+                Modifier.combinedClickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    enabled = enabled,
+                    onLongClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onLongClick()
+                    },
+                    onClick = {
+                        scope.launch {
+                            pulse.animateTo(targetScale, tween(60, easing = FastOutSlowInEasing))
+                            pulse.animateTo(
+                                1f,
+                                spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessMediumLow,
+                                ),
+                            )
+                        }
+                        onClick()
+                    },
                 )
+            } else {
+                Modifier.clickable(
+                    interactionSource = interaction,
+                    indication = null,
+                    enabled = enabled,
+                ) {
+                    scope.launch {
+                        pulse.animateTo(targetScale, tween(60, easing = FastOutSlowInEasing))
+                        pulse.animateTo(
+                            1f,
+                            spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMediumLow,
+                            ),
+                        )
+                    }
+                    onClick()
+                }
             }
-            onClick()
-        }
+        )
 }
 
 /** Полупрозрачная акцентная заливка (tileAlpha 0.85 из Theme.qml). */

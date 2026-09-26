@@ -398,6 +398,28 @@ class MainActivity : ComponentActivity() {
                                             showSettings = true
                                             closeDrawer()
                                         },
+                                        isAppPinned = { pkg ->
+                                            tiles.any { it is HomeTileItem.AppPin && it.packageName == pkg }
+                                        },
+                                        onPinApp = { app ->
+                                            vm.addTile(
+                                                HomeTileItem.AppPin(
+                                                    id = UUID.randomUUID().toString(),
+                                                    packageName = app.packageName,
+                                                    colSpan = 1,
+                                                    rowSpan = 1,
+                                                ),
+                                            )
+                                        },
+                                        onUnpinApp = { app ->
+                                            val tile = tiles.find { it is HomeTileItem.AppPin && it.packageName == app.packageName }
+                                            if (tile != null) {
+                                                handleDeleteTile(tile.id, tiles)
+                                            }
+                                        },
+                                        onRefreshApps = {
+                                            vm.refresh()
+                                        },
                                     )
                                 }
                             }

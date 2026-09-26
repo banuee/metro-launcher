@@ -41,7 +41,7 @@ data class MetroScheme(
     val accent: Color,
     val glass: Color = Color.White.copy(alpha = 0.07f),
     val glassHover: Color = Color.White.copy(alpha = 0.12f),
-    val glassDeep: Color = Color(0xFF101010).copy(alpha = 0.35f),
+    val glassDeep: Color = Color(0xFF101010).copy(alpha = 0.90f),
     val stroke: Color = Color.White.copy(alpha = 0.08f),
     val strokeStrong: Color = Color.White.copy(alpha = 0.15f),
     val text: Color = Color(0xFFF7F7F7),

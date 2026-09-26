@@ -31,6 +31,12 @@ object MetroIcons {
     const val Play = "\uF04B"
     const val Pause = "\uF04C"
     const val Next = "\uF051"
+    const val Edit = "\uF044"
+    const val Pin = "\uF08D"
+    const val Eye = "\uF06E"
+    const val EyeSlash = "\uF070"
+    const val Image = "\uF03E"
+    const val Reset = "\uF021"
 }
 
 /**

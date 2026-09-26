@@ -33,7 +33,7 @@ data class MetroSettings(
     val blurRadius: Int = 14,
     val glassColor: Int = 0xFFFFFFFF.toInt(), // Цвет подложки плиток
     val glassAlpha: Float = 0.07f,            // Прозрачность подложки (0..1.0)
-    val glassDeepAlpha: Float = 0.35f,
+    val glassDeepAlpha: Float = 0.90f,
     val strokeAlpha: Float = 0.08f,
 )
 
@@ -74,7 +74,7 @@ class MetroSettingsRepository(private val context: Context) {
             blurRadius = prefs[KEY_BLUR_RADIUS] ?: 14,
             glassColor = prefs[KEY_GLASS_COLOR] ?: 0xFFFFFFFF.toInt(),
             glassAlpha = prefs[KEY_GLASS_ALPHA] ?: 0.07f,
-            glassDeepAlpha = prefs[KEY_GLASS_DEEP_ALPHA] ?: 0.35f,
+            glassDeepAlpha = prefs[KEY_GLASS_DEEP_ALPHA] ?: 0.90f,
             strokeAlpha = prefs[KEY_STROKE_ALPHA] ?: 0.08f,
         )
     }

@@ -55,11 +55,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.BackHandler
+import dev.metro.launcher.data.AppCustomizationRepository
 import dev.metro.launcher.data.AppIconLoader
 import dev.metro.launcher.data.AppInfo
 import dev.metro.launcher.data.DrawerItem
 import dev.metro.launcher.data.JumpAlphabets
 import dev.metro.launcher.data.sectionApps
+import dev.metro.launcher.ui.picker.AppContextMenu
+import dev.metro.launcher.ui.picker.AppEditDialog
 import dev.metro.launcher.ui.theme.FrostedGlassBox
 import dev.metro.launcher.ui.theme.LocalMetroScheme
 import dev.metro.launcher.ui.theme.MetroDimens
@@ -84,14 +91,29 @@ fun DrawerScreen(
     onAppClick: (AppInfo, androidx.compose.ui.geometry.Rect?) -> Unit,
     onPickWallpaper: () -> Unit,
     onOpenSettings: () -> Unit = {},
+    isAppPinned: ((String) -> Boolean)? = null,
+    onPinApp: ((AppInfo) -> Unit)? = null,
+    onUnpinApp: ((AppInfo) -> Unit)? = null,
+    onRefreshApps: () -> Unit = {},
 ) {
     val scheme = LocalMetroScheme.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var query by remember { mutableStateOf("") }
+    val customizationRepo = remember { AppCustomizationRepository.getInstance(context) }
+    val hiddenPackages by customizationRepo.hiddenPackages.collectAsState()
 
-    val filtered = remember(apps, query) {
-        if (query.isBlank()) apps
-        else apps.filter { it.label.contains(query.trim(), ignoreCase = true) }
+    var query by remember { mutableStateOf("") }
+    var selectedAppForMenu by remember { mutableStateOf<Pair<AppInfo, androidx.compose.ui.geometry.Rect?>?>(null) }
+    var appToEdit by remember { mutableStateOf<AppInfo?>(null) }
+    var showHidden by remember { mutableStateOf(false) }
+
+    val (hiddenApps, visibleApps) = remember(apps, hiddenPackages) {
+        apps.partition { it.packageName in hiddenPackages }
+    }
+
+    val filtered = remember(visibleApps, query) {
+        if (query.isBlank()) visibleApps
+        else visibleApps.filter { it.label.contains(query.trim(), ignoreCase = true) }
     }
     val sectioned = remember(filtered) { sectionApps(filtered) }
 
@@ -100,6 +122,9 @@ fun DrawerScreen(
         animationSpec = tween(durationMillis = 220, easing = MetroAnimations.OpenEasing),
         label = "drawer-blur",
     )
+
+    BackHandler(enabled = appToEdit != null) { appToEdit = null }
+    BackHandler(enabled = selectedAppForMenu != null && appToEdit == null) { selectedAppForMenu = null }
 
     Box(Modifier.fillMaxSize().statusBarsPadding()) {
         Column(
@@ -123,8 +148,18 @@ fun DrawerScreen(
                             is DrawerItem.Row -> AppRow(
                                 app = item.app,
                                 onClick = { bounds -> onAppClick(item.app, bounds) },
+                                onLongClick = { bounds -> selectedAppForMenu = item.app to bounds },
                             )
                         }
+                    }
+                    item {
+                        HiddenAppsSection(
+                            hiddenApps = hiddenApps,
+                            expanded = showHidden,
+                            onToggleExpand = { showHidden = !showHidden },
+                            onAppClick = { app, bounds -> onAppClick(app, bounds) },
+                            onAppLongClick = { app, bounds -> selectedAppForMenu = app to bounds },
+                        )
                     }
                     item {
                         Text(
@@ -194,6 +229,81 @@ fun DrawerScreen(
                     }
                 },
                 onDismiss = { onJumpOpenChange(false) },
+            )
+        }
+
+        // Контекстное меню приложения при долгом клике
+        if (selectedAppForMenu != null) {
+            val (targetApp, targetBounds) = selectedAppForMenu!!
+            val isHidden = hiddenPackages.contains(targetApp.packageName)
+            val pinned = isAppPinned?.invoke(targetApp.packageName) ?: false
+            AppContextMenu(
+                app = targetApp,
+                anchorBounds = targetBounds,
+                isPinned = pinned,
+                isHidden = isHidden,
+                onOpenApp = {
+                    val a = targetApp
+                    val b = targetBounds
+                    selectedAppForMenu = null
+                    onAppClick(a, b)
+                },
+                onTogglePin = {
+                    selectedAppForMenu = null
+                    if (pinned) {
+                        onUnpinApp?.invoke(targetApp)
+                    } else {
+                        onPinApp?.invoke(targetApp)
+                    }
+                },
+                onEditApp = {
+                    val a = targetApp
+                    selectedAppForMenu = null
+                    appToEdit = a
+                },
+                onToggleHide = {
+                    selectedAppForMenu = null
+                    scope.launch {
+                        customizationRepo.setHidden(targetApp.packageName, !isHidden)
+                        onRefreshApps()
+                    }
+                },
+                onOpenSettings = {
+                    selectedAppForMenu = null
+                    try {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = Uri.fromParts("package", targetApp.packageName, null)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                    } catch (_: Exception) {}
+                },
+                onUninstall = {
+                    selectedAppForMenu = null
+                    try {
+                        val intent = Intent(Intent.ACTION_DELETE).apply {
+                            data = Uri.parse("package:${targetApp.packageName}")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                    } catch (_: Exception) {}
+                },
+                onDismiss = {
+                    selectedAppForMenu = null
+                },
+            )
+        }
+
+        // Диалог редактирования приложения
+        if (appToEdit != null) {
+            AppEditDialog(
+                app = appToEdit!!,
+                customizationRepo = customizationRepo,
+                onDismiss = { appToEdit = null },
+                onSaved = {
+                    appToEdit = null
+                    onRefreshApps()
+                },
             )
         }
     }
@@ -308,6 +418,7 @@ private fun LetterHeader(
 private fun AppRow(
     app: AppInfo,
     onClick: (androidx.compose.ui.geometry.Rect?) -> Unit,
+    onLongClick: ((androidx.compose.ui.geometry.Rect?) -> Unit)? = null,
 ) {
     val scheme = LocalMetroScheme.current
     val context = LocalContext.current
@@ -326,7 +437,11 @@ private fun AppRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .onGloballyPositioned { rowBounds = it.boundsInWindow() }
-            .metroClickable(targetScale = 0.96f, onClick = { onClick(rowBounds) })
+            .metroClickable(
+                targetScale = 0.96f,
+                onLongClick = onLongClick?.let { { it(rowBounds) } },
+                onClick = { onClick(rowBounds) },
+            )
             .padding(vertical = 6.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -347,6 +462,92 @@ private fun AppRow(
         }
         Spacer(Modifier.width(12.dp))
         Text(app.label, color = scheme.text, fontSize = 15.sp, fontFamily = MetroFonts.text)
+    }
+}
+
+/**
+ * Раскрывающийся блок скрытых приложений в конце списка меню приложений.
+ */
+@Composable
+private fun HiddenAppsSection(
+    hiddenApps: List<AppInfo>,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit,
+    onAppClick: (AppInfo, androidx.compose.ui.geometry.Rect?) -> Unit,
+    onAppLongClick: (AppInfo, androidx.compose.ui.geometry.Rect?) -> Unit,
+) {
+    val scheme = LocalMetroScheme.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp, bottom = 4.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .metroClickable(targetScale = 0.96f, onClick = onToggleExpand)
+                .padding(vertical = 10.dp, horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(scheme.glass),
+                contentAlignment = Alignment.Center,
+            ) {
+                MetroIcon(
+                    icon = MetroIcons.EyeSlash,
+                    color = scheme.textDim,
+                    fontSize = 14.sp,
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = "Скрытые приложения" + if (hiddenApps.isNotEmpty()) " (${hiddenApps.size})" else "",
+                color = scheme.textDim,
+                fontSize = 13.sp,
+                fontFamily = MetroFonts.text,
+                fontWeight = FontWeight.Medium,
+            )
+            Spacer(Modifier.weight(1f))
+            MetroIcon(
+                icon = if (expanded) MetroIcons.ChevronUp else MetroIcons.ChevronDown,
+                color = scheme.textDim,
+                fontSize = 14.sp,
+            )
+        }
+
+        AnimatedVisibility(
+            visible = expanded,
+            enter = fadeIn(tween(180, easing = MetroAnimations.OpenEasing)),
+            exit = fadeOut(tween(150, easing = MetroAnimations.CloseEasing)),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, start = 4.dp),
+            ) {
+                if (hiddenApps.isEmpty()) {
+                    Text(
+                        text = "Нет скрытых приложений. Зажмите любое приложение в списке и выберите «Скрыть».",
+                        color = scheme.textDim.copy(alpha = 0.65f),
+                        fontSize = 12.sp,
+                        fontFamily = MetroFonts.text,
+                        modifier = Modifier.padding(vertical = 8.dp, horizontal = 8.dp),
+                    )
+                } else {
+                    hiddenApps.forEach { app ->
+                        AppRow(
+                            app = app,
+                            onClick = { bounds -> onAppClick(app, bounds) },
+                            onLongClick = { bounds -> onAppLongClick(app, bounds) },
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

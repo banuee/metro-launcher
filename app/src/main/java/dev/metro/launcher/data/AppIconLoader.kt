@@ -4,11 +4,13 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProviderInfo
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.drawable.Drawable
 import android.util.LruCache
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.drawable.toBitmap
+import java.io.File
 import java.lang.ref.WeakReference
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -43,11 +45,23 @@ object AppIconLoader {
     private val widgetSources = mutableMapOf<String, WeakReference<AppWidgetProviderInfo>>()
     private var cacheEpoch = 0L
     private var defaultAppIconBitmap: ImageBitmap? = null
+    private var appContext: Context? = null
 
     private val _revisions = MutableStateFlow(0L)
     val revisions: StateFlow<Long> = _revisions.asStateFlow()
 
+    private fun getCustomIcon(context: Context, packageName: String): ImageBitmap? {
+        val file = File(context.filesDir, "custom_icons/$packageName.png")
+        if (!file.exists()) return null
+        return try {
+            BitmapFactory.decodeFile(file.absolutePath)?.asImageBitmap()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     suspend fun primeAppIcons(context: Context, apps: List<AppInfo>) = withContext(Dispatchers.IO) {
+        appContext = context.applicationContext
         val defaultIcon = context.applicationContext.packageManager.defaultActivityIcon
         val needsDefaultBitmap = synchronized(lock) { defaultAppIconBitmap == null }
         if (needsDefaultBitmap) {
@@ -70,6 +84,13 @@ object AppIconLoader {
         synchronized(lock) {
             val cached = appCache.get(key)
             if (cached != null) return cached
+        }
+        val customBmp = appContext?.let { getCustomIcon(it, packageName) }
+        if (customBmp != null) {
+            synchronized(lock) {
+                appCache.put(key, customBmp)
+            }
+            return customBmp
         }
         val icon = app?.icon
         if (icon != null) {
@@ -224,6 +245,15 @@ object AppIconLoader {
         keyMutex.withLock {
             synchronized(lock) { appCache.get(key) }?.let { return }
             val version = synchronized(lock) { versionTokenLocked(key) }
+            val customIcon = appContext?.let { getCustomIcon(it, app.packageName) }
+            if (customIcon != null) {
+                synchronized(lock) {
+                    if (version == versionTokenLocked(key)) {
+                        appCache.put(key, customIcon)
+                    }
+                }
+                return
+            }
             if (app.icon != defaultIcon) {
                 val bitmap = try {
                     app.icon.toImageBitmap(APP_ICON_SIZE)
@@ -263,6 +293,22 @@ object AppIconLoader {
             val version = synchronized(lock) { versionTokenLocked(key) }
             val loaded = withContext(Dispatchers.IO) {
                 val appContext = context.applicationContext
+                val customBmp = getCustomIcon(appContext, packageName)
+                if (customBmp != null) {
+                    val customLabel = AppCustomizationRepository.getInstance(appContext).getCustomLabel(packageName)
+                    val appInfo = fallbackApp?.copy(label = customLabel ?: fallbackApp.label)
+                        ?: AppInfo(
+                            label = customLabel ?: packageName,
+                            packageName = packageName,
+                            icon = appContext.packageManager.defaultActivityIcon,
+                        )
+                    return@withContext LoadedApp(
+                        appInfo = appInfo,
+                        icon = customBmp,
+                        isDefaultIcon = false,
+                        cacheable = true,
+                    )
+                }
                 val pm = appContext.packageManager
                 val applicationInfo = try {
                     pm.getApplicationInfo(packageName, 0)
@@ -288,7 +334,8 @@ object AppIconLoader {
                 } catch (_: Exception) {
                     fallbackApp?.icon ?: pm.defaultActivityIcon
                 }
-                val label = try {
+                val customLabel = AppCustomizationRepository.getInstance(appContext).getCustomLabel(packageName)
+                val label = customLabel ?: try {
                     pm.getApplicationLabel(applicationInfo).toString()
                 } catch (_: Exception) {
                     fallbackApp?.label ?: packageName

@@ -28,6 +28,8 @@ class AppRepository(private val context: Context) {
     private val pm: PackageManager = context.packageManager
 
     suspend fun loadApps(): List<AppInfo> = withContext(Dispatchers.IO) {
+        val customizationRepo = AppCustomizationRepository.getInstance(context)
+        val customLabels = customizationRepo.getAllCustomLabels()
         val launcherIntent = Intent(Intent.ACTION_MAIN, null).apply {
             addCategory(Intent.CATEGORY_LAUNCHER)
         }
@@ -37,7 +39,7 @@ class AppRepository(private val context: Context) {
                 val pkg = ri.activityInfo?.packageName ?: return@mapNotNull null
                 if (pkg == context.packageName) return@mapNotNull null // себя прячем
                 AppInfo(
-                    label = ri.loadLabel(pm).toString(),
+                    label = customLabels[pkg] ?: ri.loadLabel(pm).toString(),
                     packageName = pkg,
                     icon = ri.loadIcon(pm),
                 )
