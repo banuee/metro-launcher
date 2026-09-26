@@ -37,6 +37,8 @@ object MetroIcons {
     const val EyeSlash = "\uF070"
     const val Image = "\uF03E"
     const val Reset = "\uF021"
+    const val Clock = "\uF017"
+    const val Download = "\uF019"
 }
 
 /**

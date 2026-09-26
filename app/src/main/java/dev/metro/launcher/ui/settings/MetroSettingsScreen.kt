@@ -1,8 +1,17 @@
 package dev.metro.launcher.ui.settings
 
+import android.Manifest
+import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import dev.metro.launcher.data.AutoUpdateManager
+import dev.metro.launcher.data.AutoUpdateNotificationHelper
+import kotlin.math.roundToInt
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -83,12 +92,13 @@ import dev.metro.launcher.ui.theme.LocalMetroScheme
 import dev.metro.launcher.ui.theme.MetroAnimations
 import dev.metro.launcher.ui.theme.MetroFonts
 import dev.metro.launcher.ui.theme.MetroIcon
+import dev.metro.launcher.ui.theme.MetroIcons
 import dev.metro.launcher.ui.theme.metroClickable
 import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.math.roundToInt
 
-private enum class SettingsSection {
+enum class SettingsSection {
     HUB,
     WALLPAPER,
     COLORS,
@@ -102,12 +112,13 @@ fun MetroSettingsScreen(
     settingsRepo: MetroSettingsRepository,
     wallpaperRepo: WallpaperRepository,
     updateRepo: UpdateRepository,
+    initialSection: SettingsSection = SettingsSection.HUB,
     onPickWallpaper: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val scheme = LocalMetroScheme.current
     val settings by settingsRepo.settings.collectAsState()
-    var currentSection by remember { mutableStateOf(SettingsSection.HUB) }
+    var currentSection by remember(initialSection) { mutableStateOf(initialSection) }
 
     BackHandler(enabled = true) {
         if (currentSection == SettingsSection.HUB) {
@@ -198,6 +209,7 @@ fun MetroSettingsScreen(
                     )
                     SettingsSection.UPDATES -> UpdatesSection(
                         updateRepo = updateRepo,
+                        settingsRepo = settingsRepo,
                     )
                     SettingsSection.ABOUT -> AboutSection(
                         settingsRepo = settingsRepo,
@@ -1253,10 +1265,48 @@ private fun GlassSection(
 @Composable
 private fun UpdatesSection(
     updateRepo: UpdateRepository,
+    settingsRepo: MetroSettingsRepository,
 ) {
+    val context = LocalContext.current
     val scheme = LocalMetroScheme.current
     val scope = rememberCoroutineScope()
     val state by updateRepo.updateState.collectAsState()
+    val settings by settingsRepo.settings.collectAsState()
+
+    var hasNotificationPermission by remember {
+        mutableStateOf(AutoUpdateNotificationHelper.canPostNotifications(context))
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasNotificationPermission = isGranted
+    }
+
+    val intervalMinutesList = remember { listOf(0, 10, 30, 60, 180, 360, 720, 1440) }
+    val intervalLabels = remember {
+        listOf(
+            "Никогда",
+            "Каждые 10 минут",
+            "Каждые 30 минут",
+            "Каждый 1 час",
+            "Каждые 3 часа",
+            "Каждые 6 часов",
+            "Каждые 12 часов",
+            "Каждые 24 часа",
+        )
+    }
+
+    val currentInterval = settings.autoUpdateIntervalMinutes
+    val currentSliderIndex = remember(currentInterval) {
+        val exact = intervalMinutesList.indexOf(currentInterval)
+        if (exact != -1) exact.toFloat()
+        else {
+            val closest = intervalMinutesList.minByOrNull { kotlin.math.abs(it - currentInterval) } ?: 0
+            intervalMinutesList.indexOf(closest).toFloat()
+        }
+    }
+    var sliderValue by remember(currentSliderIndex) { mutableStateOf(currentSliderIndex) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -1313,6 +1363,166 @@ private fun UpdatesSection(
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = MetroFonts.text,
+                        )
+                    }
+                }
+            }
+        }
+
+        // Карточка автоматического сканирования на обновления
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(scheme.glass)
+                    .border(1.dp, scheme.stroke, RoundedCornerShape(12.dp))
+                    .padding(16.dp),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column {
+                            Text(
+                                text = "АВТОМАТИЧЕСКОЕ СКАНИРОВАНИЕ",
+                                fontSize = 11.sp,
+                                fontFamily = MetroFonts.text,
+                                fontWeight = FontWeight.SemiBold,
+                                color = scheme.textDim,
+                                letterSpacing = 1.sp,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text = intervalLabels.getOrElse(sliderValue.roundToInt()) { "Никогда" },
+                                fontSize = 16.sp,
+                                fontFamily = MetroFonts.headline,
+                                fontWeight = FontWeight.Normal,
+                                color = scheme.accent,
+                            )
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(scheme.glassHover),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            MetroIcon(
+                                icon = MetroIcons.Clock,
+                                color = scheme.accent,
+                                fontSize = 16.sp,
+                            )
+                        }
+                    }
+
+                    Slider(
+                        value = sliderValue,
+                        onValueChange = { newValue ->
+                            sliderValue = newValue
+                            val idx = newValue.roundToInt().coerceIn(0, intervalMinutesList.lastIndex)
+                            val minutes = intervalMinutesList[idx]
+                            settingsRepo.setAutoUpdateInterval(minutes)
+                            AutoUpdateManager.schedule(context, minutes)
+
+                            if (minutes > 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotificationPermission) {
+                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        },
+                        valueRange = 0f..7f,
+                        steps = 6,
+                        colors = SliderDefaults.colors(
+                            thumbColor = scheme.accent,
+                            activeTrackColor = scheme.accent,
+                            inactiveTrackColor = scheme.glassHover,
+                        ),
+                    )
+
+                    val activeMinutes = intervalMinutesList.getOrElse(sliderValue.roundToInt()) { 0 }
+                    if (activeMinutes > 0) {
+                        if (!hasNotificationPermission) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(scheme.red.copy(alpha = 0.12f))
+                                    .border(1.dp, scheme.red.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Уведомления отключены",
+                                        color = scheme.red,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontFamily = MetroFonts.text,
+                                    )
+                                    Text(
+                                        text = "Разрешите уведомления для оповещения о новых релизах",
+                                        color = scheme.textDim,
+                                        fontSize = 11.sp,
+                                        fontFamily = MetroFonts.text,
+                                    )
+                                }
+                                Spacer(Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(scheme.red)
+                                        .metroClickable(targetScale = 0.94f) {
+                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                            } else {
+                                                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                }
+                                                context.startActivity(intent)
+                                            }
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                ) {
+                                    Text(
+                                        text = "Включить",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontFamily = MetroFonts.text,
+                                    )
+                                }
+                            }
+                        } else {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.padding(horizontal = 2.dp),
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF339933)),
+                                )
+                                Text(
+                                    text = "Уведомления о релизах включены",
+                                    color = scheme.textDim,
+                                    fontSize = 11.sp,
+                                    fontFamily = MetroFonts.text,
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "Автоматическая проверка выключена. Обновления проверяются только вручную.",
+                            color = scheme.textDim.copy(alpha = 0.65f),
+                            fontSize = 11.sp,
+                            fontFamily = MetroFonts.text,
+                            modifier = Modifier.padding(horizontal = 2.dp),
                         )
                     }
                 }

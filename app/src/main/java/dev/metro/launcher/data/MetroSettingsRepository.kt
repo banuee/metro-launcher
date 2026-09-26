@@ -35,6 +35,8 @@ data class MetroSettings(
     val glassAlpha: Float = 0.07f,            // Прозрачность подложки (0..1.0)
     val glassDeepAlpha: Float = 0.90f,
     val strokeAlpha: Float = 0.08f,
+    val autoUpdateIntervalMinutes: Int = 0, // 0 = никогда, 10, 30, 60, 180, 360, 720, 1440
+    val lastNotifiedVersion: String = "",
 )
 
 class MetroSettingsRepository(private val context: Context) {
@@ -50,6 +52,8 @@ class MetroSettingsRepository(private val context: Context) {
         private val KEY_GLASS_ALPHA = floatPreferencesKey("glass_alpha")
         private val KEY_GLASS_DEEP_ALPHA = floatPreferencesKey("glass_deep_alpha")
         private val KEY_STROKE_ALPHA = floatPreferencesKey("stroke_alpha")
+        private val KEY_AUTO_UPDATE_INTERVAL = intPreferencesKey("auto_update_interval")
+        private val KEY_LAST_NOTIFIED_VERSION = stringPreferencesKey("last_notified_version")
 
         val DEFAULT = MetroSettings()
     }
@@ -76,6 +80,8 @@ class MetroSettingsRepository(private val context: Context) {
             glassAlpha = prefs[KEY_GLASS_ALPHA] ?: 0.07f,
             glassDeepAlpha = prefs[KEY_GLASS_DEEP_ALPHA] ?: 0.90f,
             strokeAlpha = prefs[KEY_STROKE_ALPHA] ?: 0.08f,
+            autoUpdateIntervalMinutes = prefs[KEY_AUTO_UPDATE_INTERVAL] ?: 0,
+            lastNotifiedVersion = prefs[KEY_LAST_NOTIFIED_VERSION] ?: "",
         )
     }
 
@@ -176,6 +182,23 @@ class MetroSettingsRepository(private val context: Context) {
                 prefs[KEY_GLASS_ALPHA] = DEFAULT.glassAlpha
                 prefs[KEY_GLASS_DEEP_ALPHA] = DEFAULT.glassDeepAlpha
                 prefs[KEY_STROKE_ALPHA] = DEFAULT.strokeAlpha
+            }
+        }
+    }
+
+    fun setAutoUpdateInterval(minutes: Int) {
+        val valid = minutes.coerceAtLeast(0)
+        scope.launch {
+            context.settingsStore.edit { prefs ->
+                prefs[KEY_AUTO_UPDATE_INTERVAL] = valid
+            }
+        }
+    }
+
+    fun setLastNotifiedVersion(version: String) {
+        scope.launch {
+            context.settingsStore.edit { prefs ->
+                prefs[KEY_LAST_NOTIFIED_VERSION] = version
             }
         }
     }

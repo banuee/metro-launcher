@@ -59,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import dev.metro.launcher.data.AutoUpdateNotificationHelper
 import dev.metro.launcher.data.HomeTileItem
 import dev.metro.launcher.data.InternalWidgetType
 import dev.metro.launcher.data.NotesRepository
@@ -77,7 +78,10 @@ import dev.metro.launcher.ui.theme.MetroTheme
 import dev.metro.launcher.data.MetroSettingsRepository
 import dev.metro.launcher.data.UpdateRepository
 import dev.metro.launcher.ui.settings.MetroSettingsScreen
+import dev.metro.launcher.ui.settings.SettingsSection
 import dev.metro.launcher.ui.settings.WallpaperCropScreen
+import dev.metro.launcher.data.AutoUpdateManager
+import kotlinx.coroutines.flow.first
 import java.util.UUID
 
 private const val APPWIDGET_HOST_ID = 1024
@@ -147,6 +151,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private var pendingCropUri by mutableStateOf<Uri?>(null)
+    private var openUpdatesFromIntent by mutableStateOf(false)
 
     /** Свои обои через Photo Picker (разрешений не требует вообще). */
     private val pickWallpaper = registerForActivityResult(
@@ -155,10 +160,23 @@ class MainActivity : ComponentActivity() {
         if (uri != null) pendingCropUri = uri
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("open_updates", false)) {
+            openUpdatesFromIntent = true
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        if (intent?.getBooleanExtra("open_updates", false) == true) {
+            openUpdatesFromIntent = true
+        }
+
+        AutoUpdateNotificationHelper.createNotificationChannel(applicationContext)
         appWidgetHost = AppWidgetHost(this, APPWIDGET_HOST_ID)
         appWidgetManager = AppWidgetManager.getInstance(this)
 
@@ -191,6 +209,22 @@ class MainActivity : ComponentActivity() {
                 var showAppPicker by remember { mutableStateOf(false) }
                 var showWidgetPicker by remember { mutableStateOf(false) }
                 var showSettings by remember { mutableStateOf(false) }
+                var initialSettingsSection by remember { mutableStateOf(SettingsSection.HUB) }
+
+                LaunchedEffect(openUpdatesFromIntent) {
+                    if (openUpdatesFromIntent) {
+                        initialSettingsSection = SettingsSection.UPDATES
+                        showSettings = true
+                        openUpdatesFromIntent = false
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    val s = settingsRepo.settingsFlow.first()
+                    if (s.autoUpdateIntervalMinutes > 0) {
+                        AutoUpdateManager.schedule(context, s.autoUpdateIntervalMinutes)
+                    }
+                }
 
                 val drawerListState = rememberLazyListState()
                 val notesRepo = remember { NotesRepository(context) }
@@ -534,6 +568,7 @@ class MainActivity : ComponentActivity() {
                         settingsRepo = settingsRepo,
                         wallpaperRepo = wpRepo,
                         updateRepo = updateRepo,
+                        initialSection = initialSettingsSection,
                         onPickWallpaper = {
                             try {
                                 pickWallpaper.launch(
