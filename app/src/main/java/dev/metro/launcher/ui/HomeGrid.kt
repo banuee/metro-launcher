@@ -417,45 +417,55 @@ fun HomeGrid(
 
         val displayTiles = previewLayout ?: latestTiles
         val footerRow = (latestTiles.maxOfOrNull { (it.row ?: 0) + it.rowSpan } ?: 0)
-        val totalGridHeight = padding * 2 + (rowHeight + gap) * footerRow + weatherPanelOffset + 240.dp
+
+        // Высота контента плиток строго по содержимому (без раздутия на +240dp)
+        val tilesContentHeight = if (footerRow > 0) {
+            padding * 2 + (rowHeight + gap) * footerRow - gap + weatherPanelOffset
+        } else {
+            padding * 2
+        }
+        val isContentTallerThanScreen = tilesContentHeight > maxHeight
+        val totalGridHeight = if (isContentTallerThanScreen) {
+            tilesContentHeight + rowHeight + gap
+        } else {
+            maxHeight
+        }
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(scrollState, enabled = selectedTileId == null && draggingTileId == null),
+                .verticalScroll(scrollState, enabled = isContentTallerThanScreen && selectedTileId == null && draggingTileId == null),
         ) {
-            // Фон сетки: тап снимает выделение, долгий тап по пустой ячейке открывает меню добавления в эту ячейку
+            // Фон сетки: тап снимает выделение, долгий тап по любому пустому месту открывает меню добавления
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(totalGridHeight)
-                    .pointerInput(selectedTileId, latestTiles) {
+                    .pointerInput(latestTiles, footerRow) {
                         detectTapGestures(
                             onTap = { selectedTileId = null },
                             onLongPress = { touchOffset ->
-                                if (selectedTileId == null) {
-                                    val touchX = touchOffset.x
-                                    val touchY = touchOffset.y
-                                    val extraY = if (weatherTile != null) with(density) { weatherPanelOffset.toPx() } else 0f
-                                    val weatherSplitY = paddingPx + (rowHeightPx + gapPx) * weatherSplitRow
-                                    if (weatherPanelOffset > 10.dp && touchY >= weatherSplitY && touchY < weatherSplitY + extraY) {
-                                        return@detectTapGestures
-                                    }
-                                    val adjustedTouchY = if (weatherTile != null && touchY >= weatherSplitY + extraY) {
-                                        touchY - extraY
-                                    } else {
-                                        touchY
-                                    }
-                                    val col = ((touchX - paddingPx) / (colWidthPx + gapPx)).toInt().coerceIn(0, 3)
-                                    val row = ((adjustedTouchY - paddingPx) / (rowHeightPx + gapPx)).toInt().coerceAtLeast(0)
-                                    val hits = GridPacker.rectHits(latestTiles, col, row, 1, 1)
-                                    if (hits == null) {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        onEmptyCellLongClick(col, row)
-                                        onEmptyLongClick()
-                                    }
+                                selectedTileId = null
+                                val touchX = touchOffset.x
+                                val touchY = touchOffset.y
+                                val extraY = if (weatherTile != null) with(density) { weatherPanelOffset.toPx() } else 0f
+                                val weatherSplitY = paddingPx + (rowHeightPx + gapPx) * weatherSplitRow
+                                if (weatherPanelOffset > 10.dp && touchY >= weatherSplitY && touchY < weatherSplitY + extraY) {
+                                    return@detectTapGestures
+                                }
+                                val adjustedTouchY = if (weatherTile != null && touchY >= weatherSplitY + extraY) {
+                                    touchY - extraY
                                 } else {
-                                    selectedTileId = null
+                                    touchY
+                                }
+                                val col = (((touchX - paddingPx) / (colWidthPx + gapPx)).toInt()).coerceIn(0, 3)
+                                val rawRow = (((adjustedTouchY - paddingPx) / (rowHeightPx + gapPx)).toInt()).coerceAtLeast(0)
+                                val row = rawRow.coerceAtMost(footerRow)
+                                val hits = if (row < footerRow) GridPacker.rectHits(latestTiles, col, row, 1, 1) else null
+                                if (hits == null) {
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onEmptyCellLongClick(col, row)
+                                    onEmptyLongClick()
                                 }
                             },
                         )
@@ -797,31 +807,20 @@ fun HomeGrid(
                     }
                 }
 
-                // Пустой футер сетки для удобного тапа и дропа в конец
+                // Пустой футер сетки для тестов и зоны дропа в конец (без темных квадратов/рипплов)
+                val footerTopDp = padding + (rowHeight + gap) * footerRow + weatherPanelOffset
+                val footerSpaceHeight = if (totalGridHeight > footerTopDp) {
+                    totalGridHeight - footerTopDp
+                } else {
+                    rowHeight + gap
+                }
                 Box(
                     modifier = Modifier
-                        .offset(
-                            x = padding,
-                            y = padding + (rowHeight + gap) * footerRow + weatherPanelOffset,
-                        )
+                        .offset(x = padding, y = footerTopDp)
                         .fillMaxWidth()
-                        .height(180.dp)
-                        .testTag(EMPTY_SPACE_TAG)
-                        .combinedClickable(
-                            onClick = { selectedTileId = null },
-                            onLongClick = {
-                                if (selectedTileId == null) {
-                                    onEmptyCellLongClick(0, footerRow)
-                                    onEmptyLongClick()
-                                } else {
-                                    selectedTileId = null
-                                }
-                            },
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Spacer(Modifier.fillMaxSize())
-                }
+                        .height(footerSpaceHeight.coerceAtLeast(rowHeight))
+                        .testTag(EMPTY_SPACE_TAG),
+                )
             }
         }
     }

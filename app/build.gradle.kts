@@ -17,8 +17,8 @@ android {
         applicationId = "dev.metro.launcher"
         minSdk = 26
         targetSdk = 35
-        versionCode = 12
-        versionName = "0.6.5"
+        versionCode = 13
+        versionName = "0.6.6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
