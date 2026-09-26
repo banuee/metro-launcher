@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
 import java.io.IOException
@@ -102,6 +103,17 @@ class HomeLayoutRepository(private val context: Context) {
     suspend fun resetToDefault() {
         context.layoutStore.edit { prefs ->
             prefs[key] = serialize(defaultTiles())
+        }
+    }
+
+    suspend fun getLayoutJson(): String {
+        val prefs = context.layoutStore.data.catch { emit(emptyPreferences()) }.first()
+        return prefs[key] ?: serialize(defaultTiles())
+    }
+
+    suspend fun restoreLayoutJson(json: String) {
+        context.layoutStore.edit { prefs ->
+            prefs[key] = json
         }
     }
 

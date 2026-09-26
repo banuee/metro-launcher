@@ -83,8 +83,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.metro.launcher.BuildConfig
+import dev.metro.launcher.data.BackupRepository
 import dev.metro.launcher.data.DeviceWallpaper
+import dev.metro.launcher.data.HomeLayoutRepository
 import dev.metro.launcher.data.MetroSettingsRepository
+import dev.metro.launcher.data.NotesRepository
 import dev.metro.launcher.data.UpdateRepository
 import dev.metro.launcher.data.UpdateState
 import dev.metro.launcher.data.WallpaperRepository
@@ -96,6 +99,9 @@ import dev.metro.launcher.ui.theme.MetroIcons
 import dev.metro.launcher.ui.theme.metroClickable
 import kotlinx.coroutines.launch
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.roundToInt
 
 enum class SettingsSection {
@@ -104,6 +110,7 @@ enum class SettingsSection {
     COLORS,
     GLASS,
     UPDATES,
+    BACKUP,
     ABOUT,
 }
 
@@ -112,6 +119,9 @@ fun MetroSettingsScreen(
     settingsRepo: MetroSettingsRepository,
     wallpaperRepo: WallpaperRepository,
     updateRepo: UpdateRepository,
+    backupRepo: BackupRepository,
+    layoutRepo: HomeLayoutRepository,
+    notesRepo: NotesRepository,
     initialSection: SettingsSection = SettingsSection.HUB,
     onPickWallpaper: () -> Unit,
     onDismiss: () -> Unit,
@@ -211,6 +221,13 @@ fun MetroSettingsScreen(
                         updateRepo = updateRepo,
                         settingsRepo = settingsRepo,
                     )
+                    SettingsSection.BACKUP -> BackupSection(
+                        backupRepo = backupRepo,
+                        settingsRepo = settingsRepo,
+                        layoutRepo = layoutRepo,
+                        notesRepo = notesRepo,
+                        wallpaperRepo = wallpaperRepo,
+                    )
                     SettingsSection.ABOUT -> AboutSection(
                         settingsRepo = settingsRepo,
                     )
@@ -233,6 +250,7 @@ private fun SettingsHeader(
         SettingsSection.COLORS -> "ЦВЕТА И АКЦЕНТЫ"
         SettingsSection.GLASS -> "БЛЮР И СТЕКЛО"
         SettingsSection.UPDATES -> "ОБНОВЛЕНИЯ"
+        SettingsSection.BACKUP -> "РЕЗЕРВНАЯ КОПИЯ"
         SettingsSection.ABOUT -> "О ЛАУНЧЕРЕ"
     }
 
@@ -340,6 +358,12 @@ private fun HubSection(onNavigate: (SettingsSection) -> Unit) {
                 glyph = "\uf021",
                 title = "Обновления лаунчера",
                 subtitle = "Автоматические OTA-обновления по воздуху через GitHub",
+            ),
+            HubItem(
+                section = SettingsSection.BACKUP,
+                glyph = "\uf0c7",
+                title = "Резервная копия и сброс",
+                subtitle = "Экспорт и импорт состояния, плиток, настроек и обоев",
             ),
             HubItem(
                 section = SettingsSection.ABOUT,
@@ -1228,6 +1252,49 @@ private fun GlassSection(
             }
         }
 
+        // Анимация при разблокировке
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(scheme.glass)
+                    .border(1.dp, scheme.stroke, RoundedCornerShape(12.dp))
+                    .padding(16.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Анимация при разблокировке",
+                            color = scheme.text,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = MetroFonts.text,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = "Каскадное появление плиток при разблокировке экрана",
+                            color = scheme.textDim,
+                            fontSize = 12.sp,
+                            fontFamily = MetroFonts.text,
+                        )
+                    }
+                    Switch(
+                        checked = settings.unlockAnimationEnabled,
+                        onCheckedChange = { settingsRepo.setUnlockAnimationEnabled(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = scheme.accent,
+                            checkedTrackColor = scheme.glassHover,
+                        ),
+                    )
+                }
+            }
+        }
+
         // Кнопка сброса стекла
         item {
             Box(
@@ -1764,6 +1831,283 @@ private fun UpdatesSection(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackupSection(
+    backupRepo: BackupRepository,
+    settingsRepo: MetroSettingsRepository,
+    layoutRepo: HomeLayoutRepository,
+    notesRepo: NotesRepository,
+    wallpaperRepo: WallpaperRepository,
+) {
+    val scheme = LocalMetroScheme.current
+    val scope = rememberCoroutineScope()
+    var statusMessage by remember { mutableStateOf<String?>(null) }
+    var isError by remember { mutableStateOf(false) }
+    var isWorking by remember { mutableStateOf(false) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri != null) {
+            isWorking = true
+            statusMessage = "Экспорт данных..."
+            isError = false
+            scope.launch {
+                val res = backupRepo.exportBackup(
+                    uri = uri,
+                    settingsRepo = settingsRepo,
+                    layoutRepo = layoutRepo,
+                    notesRepo = notesRepo,
+                    wallpaperRepo = wallpaperRepo,
+                )
+                isWorking = false
+                isError = !res.success
+                statusMessage = res.message ?: if (res.success) "Резервная копия успешно создана" else "Ошибка экспорта"
+            }
+        }
+    }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            isWorking = true
+            statusMessage = "Восстановление данных..."
+            isError = false
+            scope.launch {
+                val res = backupRepo.importBackup(
+                    uri = uri,
+                    settingsRepo = settingsRepo,
+                    layoutRepo = layoutRepo,
+                    notesRepo = notesRepo,
+                    wallpaperRepo = wallpaperRepo,
+                )
+                isWorking = false
+                isError = !res.success
+                statusMessage = res.message ?: if (res.success) "Состояние успешно восстановлено" else "Ошибка импорта"
+            }
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        if (statusMessage != null) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isError) scheme.red.copy(alpha = 0.15f) else scheme.accent.copy(alpha = 0.15f))
+                        .border(1.dp, if (isError) scheme.red.copy(alpha = 0.5f) else scheme.accent.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .padding(14.dp),
+                ) {
+                    Text(
+                        text = statusMessage ?: "",
+                        color = if (isError) scheme.red else scheme.accent,
+                        fontSize = 13.sp,
+                        fontFamily = MetroFonts.text,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+            }
+        }
+
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(scheme.glass)
+                    .border(1.dp, scheme.stroke, RoundedCornerShape(12.dp))
+                    .padding(16.dp),
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(scheme.glassHover)
+                                .border(1.dp, scheme.stroke, RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            MetroIcon(icon = "\uf019", fontSize = 18.sp, color = scheme.accent)
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column {
+                            Text(
+                                text = "Экспорт состояния",
+                                color = scheme.text,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = MetroFonts.text,
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = "Сохранение настроек, плиток, иконок и обоев в файл",
+                                color = scheme.textDim,
+                                fontSize = 12.sp,
+                                fontFamily = MetroFonts.text,
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+
+                    Text(
+                        text = "Создаёт портативный файл резервной копии .json со всеми текущими параметрами, расположением и размерами плиток, пользовательскими иконками, скрытыми приложениями, заметками и изображением обоев.",
+                        color = scheme.textDim,
+                        fontSize = 12.sp,
+                        fontFamily = MetroFonts.text,
+                        lineHeight = 16.sp,
+                    )
+
+                    Spacer(Modifier.height(16.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(scheme.accent)
+                            .metroClickable(
+                                targetScale = 0.96f,
+                                enabled = !isWorking,
+                                onClick = {
+                                    val dateStr = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+                                    exportLauncher.launch("metro-launcher-backup-$dateStr.json")
+                                },
+                            )
+                            .padding(vertical = 13.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "Экспортировать в файл...",
+                            color = Color.White,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = MetroFonts.text,
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(scheme.glass)
+                    .border(1.dp, scheme.stroke, RoundedCornerShape(12.dp))
+                    .padding(16.dp),
+            ) {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(scheme.glassHover)
+                                .border(1.dp, scheme.stroke, RoundedCornerShape(8.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            MetroIcon(icon = "\uf093", fontSize = 18.sp, color = scheme.accent)
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Column {
+                            Text(
+                                text = "Восстановление состояния",
+                                color = scheme.text,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = MetroFonts.text,
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = "Импорт настроек и плиток из файла резервной копии",
+                                color = scheme.textDim,
+                                fontSize = 12.sp,
+                                fontFamily = MetroFonts.text,
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+
+                    Text(
+                        text = "Восстанавливает все сохранённые параметры лаунчера: сетку виджетов, кастомизации приложений, заметки, акцентную тему и обои. Существующее состояние будет перезаписано.",
+                        color = scheme.textDim,
+                        fontSize = 12.sp,
+                        fontFamily = MetroFonts.text,
+                        lineHeight = 16.sp,
+                    )
+
+                    Spacer(Modifier.height(16.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(scheme.glassHover)
+                            .border(1.dp, scheme.strokeStrong, RoundedCornerShape(8.dp))
+                            .metroClickable(
+                                targetScale = 0.96f,
+                                enabled = !isWorking,
+                                onClick = {
+                                    importLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
+                                },
+                            )
+                            .padding(vertical = 13.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "Восстановить из файла...",
+                            color = scheme.text,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            fontFamily = MetroFonts.text,
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(scheme.glassHover)
+                    .border(1.dp, scheme.red.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                    .metroClickable(
+                        targetScale = 0.96f,
+                        onClick = {
+                            scope.launch {
+                                settingsRepo.resetAllDefaults()
+                                layoutRepo.resetToDefault()
+                                statusMessage = "Все настройки и сетка сброшены к начальным"
+                                isError = false
+                            }
+                        },
+                    )
+                    .padding(vertical = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = "Сбросить все настройки и сетку плиток",
+                    color = scheme.red,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = MetroFonts.text,
+                )
             }
         }
     }

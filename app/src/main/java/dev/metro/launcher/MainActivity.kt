@@ -60,6 +60,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import dev.metro.launcher.data.AutoUpdateNotificationHelper
+import dev.metro.launcher.data.BackupRepository
 import dev.metro.launcher.data.HomeTileItem
 import dev.metro.launcher.data.InternalWidgetType
 import dev.metro.launcher.data.NotesRepository
@@ -150,6 +151,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private var unlockTrigger by mutableStateOf(0L)
+
+    private val unlockReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_USER_PRESENT) {
+                unlockTrigger = System.currentTimeMillis()
+            }
+        }
+    }
+
     private var pendingCropUri by mutableStateOf<Uri?>(null)
     private var openUpdatesFromIntent by mutableStateOf(false)
 
@@ -189,6 +200,17 @@ class MainActivity : ComponentActivity() {
         }.onFailure { error ->
             Log.w("MetroLauncher", "Не удалось зарегистрировать wallpaper receiver", error)
         }
+
+        runCatching {
+            val filter = IntentFilter(Intent.ACTION_USER_PRESENT)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(unlockReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                registerReceiver(unlockReceiver, filter)
+            }
+        }.onFailure { error ->
+            Log.w("MetroLauncher", "Не удалось зарегистрировать unlock receiver", error)
+        }
         setContent {
             val context = applicationContext
             val settingsRepo = remember { MetroSettingsRepository(context) }
@@ -198,6 +220,7 @@ class MainActivity : ComponentActivity() {
             }
 
             MetroTheme(settingsRepo = settingsRepo) {
+                val settings by settingsRepo.settings.collectAsState()
                 val apps by vm.apps.collectAsState()
                 val tiles by vm.tiles.collectAsState()
                 val transitionState by transitionManager.state.collectAsState()
@@ -384,6 +407,8 @@ class MainActivity : ComponentActivity() {
                                         pendingTargetPosition = Pair(col, row)
                                         showAddMenu = true
                                     },
+                                    unlockTrigger = unlockTrigger,
+                                    unlockAnimationEnabled = settings.unlockAnimationEnabled,
                                 )
                             }
                             AnimatedVisibility(
@@ -568,6 +593,9 @@ class MainActivity : ComponentActivity() {
                         settingsRepo = settingsRepo,
                         wallpaperRepo = wpRepo,
                         updateRepo = updateRepo,
+                        backupRepo = remember { BackupRepository(context) },
+                        layoutRepo = vm.layoutRepo,
+                        notesRepo = notesRepo,
                         initialSection = initialSettingsSection,
                         onPickWallpaper = {
                             try {
@@ -699,6 +727,9 @@ class MainActivity : ComponentActivity() {
             unregisterReceiver(wallpaperReceiver)
         }.onFailure { error ->
             Log.w("MetroLauncher", "Не удалось снять wallpaper receiver", error)
+        }
+        runCatching {
+            unregisterReceiver(unlockReceiver)
         }
         super.onDestroy()
     }

@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
 import org.json.JSONObject
@@ -47,6 +48,17 @@ class NotesRepository(private val context: Context) {
     }
 
     suspend fun delete(id: String) = update { list -> list.filter { it.id != id } }
+
+    suspend fun getNotesJson(): String {
+        val prefs = context.notesStore.data.catch { emit(emptyPreferences()) }.first()
+        return prefs[key] ?: serialize(defaultNotes())
+    }
+
+    suspend fun restoreNotesJson(json: String) {
+        context.notesStore.edit { prefs ->
+            prefs[key] = json
+        }
+    }
 
     private suspend fun update(fn: (List<Note>) -> List<Note>) {
         context.notesStore.edit { prefs ->

@@ -37,6 +37,7 @@ data class MetroSettings(
     val strokeAlpha: Float = 0.08f,
     val autoUpdateIntervalMinutes: Int = 0, // 0 = никогда, 10, 30, 60, 180, 360, 720, 1440
     val lastNotifiedVersion: String = "",
+    val unlockAnimationEnabled: Boolean = true,
 )
 
 class MetroSettingsRepository(private val context: Context) {
@@ -54,6 +55,7 @@ class MetroSettingsRepository(private val context: Context) {
         private val KEY_STROKE_ALPHA = floatPreferencesKey("stroke_alpha")
         private val KEY_AUTO_UPDATE_INTERVAL = intPreferencesKey("auto_update_interval")
         private val KEY_LAST_NOTIFIED_VERSION = stringPreferencesKey("last_notified_version")
+        private val KEY_UNLOCK_ANIMATION = booleanPreferencesKey("unlock_animation_enabled")
 
         val DEFAULT = MetroSettings()
     }
@@ -82,6 +84,7 @@ class MetroSettingsRepository(private val context: Context) {
             strokeAlpha = prefs[KEY_STROKE_ALPHA] ?: 0.08f,
             autoUpdateIntervalMinutes = prefs[KEY_AUTO_UPDATE_INTERVAL] ?: 0,
             lastNotifiedVersion = prefs[KEY_LAST_NOTIFIED_VERSION] ?: "",
+            unlockAnimationEnabled = prefs[KEY_UNLOCK_ANIMATION] ?: true,
         )
     }
 
@@ -200,6 +203,36 @@ class MetroSettingsRepository(private val context: Context) {
             context.settingsStore.edit { prefs ->
                 prefs[KEY_LAST_NOTIFIED_VERSION] = version
             }
+        }
+    }
+
+    fun setUnlockAnimationEnabled(enabled: Boolean) {
+        scope.launch {
+            context.settingsStore.edit { prefs ->
+                prefs[KEY_UNLOCK_ANIMATION] = enabled
+            }
+        }
+    }
+
+    suspend fun restoreSettings(newSettings: MetroSettings) {
+        context.settingsStore.edit { prefs ->
+            if (newSettings.accentColor != null) {
+                prefs[KEY_ACCENT_COLOR] = newSettings.accentColor
+            } else {
+                prefs.remove(KEY_ACCENT_COLOR)
+            }
+            prefs[KEY_AUTO_ACCENT] = newSettings.autoAccent
+            val str = newSettings.generatedPalette.joinToString(",") { "%08X".format(it) }
+            prefs[KEY_GENERATED_PALETTE] = str
+            prefs[KEY_BLUR_ENABLED] = newSettings.blurEnabled
+            prefs[KEY_BLUR_RADIUS] = newSettings.blurRadius
+            prefs[KEY_GLASS_COLOR] = newSettings.glassColor
+            prefs[KEY_GLASS_ALPHA] = newSettings.glassAlpha
+            prefs[KEY_GLASS_DEEP_ALPHA] = newSettings.glassDeepAlpha
+            prefs[KEY_STROKE_ALPHA] = newSettings.strokeAlpha
+            prefs[KEY_AUTO_UPDATE_INTERVAL] = newSettings.autoUpdateIntervalMinutes
+            prefs[KEY_LAST_NOTIFIED_VERSION] = newSettings.lastNotifiedVersion
+            prefs[KEY_UNLOCK_ANIMATION] = newSettings.unlockAnimationEnabled
         }
     }
 

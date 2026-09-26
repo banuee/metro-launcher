@@ -3,6 +3,7 @@ package dev.metro.launcher.data
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.util.Base64
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -139,5 +140,45 @@ class AppCustomizationRepository(private val context: Context) {
             file.delete()
         }
         AppIconLoader.evict(packageName)
+    }
+
+    fun getAllCustomIconsBase64(): Map<String, String> {
+        val result = mutableMapOf<String, String>()
+        val files = iconsDir.listFiles() ?: return emptyMap()
+        for (f in files) {
+            if (f.isFile && f.extension.equals("png", ignoreCase = true)) {
+                try {
+                    val bytes = f.readBytes()
+                    val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                    result[f.nameWithoutExtension] = b64
+                } catch (_: Exception) {}
+            }
+        }
+        return result
+    }
+
+    suspend fun restoreCustomizations(
+        hidden: Set<String>,
+        labelsJson: String?,
+        iconsBase64: Map<String, String>,
+    ) = withContext(Dispatchers.IO) {
+        context.customizationStore.edit { prefs ->
+            prefs[KEY_HIDDEN_PACKAGES] = hidden
+            if (labelsJson.isNullOrBlank()) {
+                prefs.remove(KEY_CUSTOM_LABELS)
+            } else {
+                prefs[KEY_CUSTOM_LABELS] = labelsJson
+            }
+        }
+        // Очищаем старые кастомные иконки
+        iconsDir.listFiles()?.forEach { it.delete() }
+        // Записываем новые кастомные иконки из Base64
+        iconsBase64.forEach { (pkg, b64) ->
+            try {
+                val bytes = Base64.decode(b64, Base64.DEFAULT)
+                File(iconsDir, "$pkg.png").writeBytes(bytes)
+            } catch (_: Exception) {}
+        }
+        AppIconLoader.evictAll()
     }
 }

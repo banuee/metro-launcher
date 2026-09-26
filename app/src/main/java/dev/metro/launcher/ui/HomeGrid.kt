@@ -5,6 +5,7 @@ import android.appwidget.AppWidgetManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
@@ -123,6 +124,8 @@ fun HomeGrid(
     onEmptyLongClick: () -> Unit,
     onDropDecision: (GridPacker.DropDecision) -> Unit = { },
     onEmptyCellLongClick: (col: Int, row: Int) -> Unit = { _, _ -> },
+    unlockTrigger: Long = 0L,
+    unlockAnimationEnabled: Boolean = true,
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
@@ -553,6 +556,21 @@ fun HomeGrid(
                         } else Offset.Zero
                     } else Offset.Zero
 
+                    val unlockAnim = remember(tile.id) { Animatable(1f) }
+                    LaunchedEffect(unlockTrigger) {
+                        if (unlockTrigger > 0L && unlockAnimationEnabled) {
+                            unlockAnim.snapTo(0f)
+                            val staggerDelay = ((row * 35) + (col * 20)).coerceIn(0, 320)
+                            kotlinx.coroutines.delay(staggerDelay.toLong())
+                            unlockAnim.animateTo(
+                                targetValue = 1f,
+                                animationSpec = tween(durationMillis = 300, easing = MetroAnimations.OpenEasing),
+                            )
+                        } else {
+                            unlockAnim.snapTo(1f)
+                        }
+                    }
+
                     Box(
                         modifier = Modifier
                             .offset(x = animatedX, y = animatedY)
@@ -566,6 +584,17 @@ fun HomeGrid(
                                     scaleX = 1.05f
                                     scaleY = 1.05f
                                     shadowElevation = 24f
+                                } else {
+                                    val progress = unlockAnim.value
+                                    if (progress < 0.999f) {
+                                        val inv = 1f - progress
+                                        translationY = inv * with(density) { 36.dp.toPx() }
+                                        scaleX = 0.93f + 0.07f * progress
+                                        scaleY = 0.93f + 0.07f * progress
+                                        alpha = progress.coerceIn(0f, 1f)
+                                        rotationX = inv * (-8f)
+                                        cameraDistance = 12f * density.density
+                                    }
                                 }
                             }
                             .pointerInput(tile.id) {
