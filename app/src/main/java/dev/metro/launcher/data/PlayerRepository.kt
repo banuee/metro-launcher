@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 
+import android.graphics.Bitmap
+
 /** Должен быть разрешен пользователем (доступ к уведомлениям). */
 class MetroListener : NotificationListenerService() {
     companion object {
@@ -42,7 +44,11 @@ data class TrackInfo(
     val title: String,
     val artist: String,
     val appLabel: String,
+    val appPackage: String,
     val playing: Boolean,
+    val albumArt: Bitmap? = null,
+    val durationMs: Long = 0L,
+    val positionMs: Long = 0L,
 )
 
 /**
@@ -58,6 +64,7 @@ class PlayerRepository(private val context: Context) {
     private val _track = MutableStateFlow<TrackInfo?>(null)
     val track: StateFlow<TrackInfo?> = _track.asStateFlow()
 
+    private var lastPackage: String? = null
     private var controller: MediaController? = null
     private val controllerCallback = object : MediaController.Callback() {
         override fun onPlaybackStateChanged(state: PlaybackState?) {
@@ -144,6 +151,33 @@ class PlayerRepository(private val context: Context) {
         }
     }
 
+    fun seekTo(positionMs: Long) {
+        try {
+            controller?.transportControls?.seekTo(positionMs)
+        } catch (_: Exception) {
+        }
+    }
+
+    fun openPlayer() {
+        val pkg = _track.value?.appPackage ?: controller?.packageName ?: lastPackage
+        if (pkg != null) {
+            try {
+                val intent = context.packageManager.getLaunchIntentForPackage(pkg)
+                if (intent != null) {
+                    context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    return
+                }
+            } catch (_: Exception) {}
+        }
+        try {
+            val musicIntent = Intent(Intent.ACTION_MAIN).apply {
+                addCategory(Intent.CATEGORY_APP_MUSIC)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(musicIntent)
+        } catch (_: Exception) {}
+    }
+
     private fun pull() {
         try {
             val sessions = sessionManager.getActiveSessions(listenerComponent)
@@ -154,6 +188,7 @@ class PlayerRepository(private val context: Context) {
                 _track.value = null
                 return
             }
+            lastPackage = session.packageName
             if (controller?.sessionToken != session.sessionToken) {
                 controller?.unregisterCallback(controllerCallback)
                 controller = MediaController(context, session.sessionToken).also {
@@ -167,11 +202,26 @@ class PlayerRepository(private val context: Context) {
                 ?: md?.getString(MediaMetadata.METADATA_KEY_ALBUM)
                 ?: ""
             val state = c.playbackState?.state
+            val art = md?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+                ?: md?.getBitmap(MediaMetadata.METADATA_KEY_ART)
+            val duration = md?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: 0L
+            val position = c.playbackState?.position ?: 0L
+            val appLabel = try {
+                context.packageManager.getApplicationLabel(
+                    context.packageManager.getApplicationInfo(session.packageName, 0)
+                ).toString()
+            } catch (_: Exception) {
+                session.packageName.substringAfterLast('.')
+            }
             _track.value = TrackInfo(
                 title = title?.takeIf { it.isNotBlank() } ?: "Без названия",
                 artist = artist,
-                appLabel = session.packageName,
+                appLabel = appLabel,
+                appPackage = session.packageName,
                 playing = state == PlaybackState.STATE_PLAYING,
+                albumArt = art,
+                durationMs = duration.coerceAtLeast(0L),
+                positionMs = position.coerceAtLeast(0L),
             )
         } catch (_: SecurityException) {
             // NotificationListener не выдан — тихо показываем «ничего не играет».
@@ -185,6 +235,6 @@ class PlayerRepository(private val context: Context) {
     }
 
     companion object {
-        private const val POLL_MS = 3000L
+        private const val POLL_MS = 1500L
     }
 }

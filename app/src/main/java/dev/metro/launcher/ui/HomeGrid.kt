@@ -571,6 +571,9 @@ fun HomeGrid(
                                         ClockTile(
                                             onClickClock = { onClockClick(tileSlotRect(tile.id)) },
                                             onClickCalendar = { onCalendarClick(tileSlotRect(tile.id)) },
+                                            colSpan = colSpan,
+                                            rowSpan = rowSpan,
+                                            width = animatedWidth,
                                             height = animatedHeight,
                                             onLongPress = { selectedTileId = tile.id },
                                         )
@@ -579,6 +582,9 @@ fun HomeGrid(
                                         WeatherTile(
                                             ui = weatherUi,
                                             onClick = { weatherExpanded = !weatherExpanded },
+                                            colSpan = colSpan,
+                                            rowSpan = rowSpan,
+                                            width = animatedWidth,
                                             height = animatedHeight,
                                             onLongPress = { selectedTileId = tile.id },
                                         )
@@ -586,6 +592,9 @@ fun HomeGrid(
                                     InternalWidgetType.NOTES -> {
                                         NotesTile(
                                             repo = notesRepo,
+                                            colSpan = colSpan,
+                                            rowSpan = rowSpan,
+                                            width = animatedWidth,
                                             height = animatedHeight,
                                             onLongPress = { selectedTileId = tile.id },
                                         )
@@ -593,6 +602,9 @@ fun HomeGrid(
                                     InternalWidgetType.PLAYER -> {
                                         PlayerTile(
                                             repo = playerRepo,
+                                            colSpan = colSpan,
+                                            rowSpan = rowSpan,
+                                            width = animatedWidth,
                                             height = animatedHeight,
                                             onLongPress = { selectedTileId = tile.id },
                                         )
@@ -620,6 +632,7 @@ fun HomeGrid(
                                 AppTile(
                                     app = app,
                                     onClick = { onAppClick(app, tileSlotRect(tile.id)) },
+                                    width = animatedWidth,
                                     height = animatedHeight,
                                     colSpan = colSpan,
                                     rowSpan = rowSpan,

@@ -125,12 +125,29 @@ class UpdateRepository(private val context: Context) {
                 val targetFile = File(updatesDir, "metro-launcher-${info.versionName}.apk")
                 if (targetFile.exists()) targetFile.delete()
 
-                val url = URL(info.apkDownloadUrl)
-                val conn = (url.openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 12000
-                    readTimeout = 15000
-                    instanceFollowRedirects = true
-                    setRequestProperty("User-Agent", "MetroLauncher-App/${BuildConfig.VERSION_NAME}")
+                var currentUrl = info.apkDownloadUrl
+                var conn: HttpURLConnection
+                var redirects = 0
+
+                while (true) {
+                    val url = URL(currentUrl)
+                    conn = (url.openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 15000
+                        readTimeout = 20000
+                        instanceFollowRedirects = true
+                        setRequestProperty("User-Agent", "MetroLauncher-App/${BuildConfig.VERSION_NAME}")
+                    }
+                    val code = conn.responseCode
+                    if (code in listOf(HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_MOVED_TEMP, HttpURLConnection.HTTP_SEE_OTHER, 307, 308) && redirects < 5) {
+                        val location = conn.getHeaderField("Location")
+                        if (!location.isNullOrBlank()) {
+                            currentUrl = location
+                            redirects++
+                            conn.disconnect()
+                            continue
+                        }
+                    }
+                    break
                 }
 
                 val totalLength = if (conn.contentLengthLong > 0) conn.contentLengthLong else info.apkSize
@@ -159,6 +176,17 @@ class UpdateRepository(private val context: Context) {
 
     fun installApk(file: File) {
         try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                if (!app.packageManager.canRequestPackageInstalls()) {
+                    val permIntent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:${app.packageName}")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    app.startActivity(permIntent)
+                    return
+                }
+            }
+
             val contentUri: Uri = FileProvider.getUriForFile(
                 app,
                 "${app.packageName}.fileprovider",
@@ -177,9 +205,11 @@ class UpdateRepository(private val context: Context) {
         }
     }
 
-    private fun isNewerVersion(remote: String, current: String): Boolean {
-        val rParts = remote.split(".").mapNotNull { it.toIntOrNull() }
-        val cParts = current.split(".").mapNotNull { it.toIntOrNull() }
+    fun isNewerVersion(remote: String, current: String): Boolean {
+        val rClean = remote.removePrefix("v").trim().substringBefore('-').substringBefore('+')
+        val cClean = current.removePrefix("v").trim().substringBefore('-').substringBefore('+')
+        val rParts = rClean.split(".").mapNotNull { it.toIntOrNull() }
+        val cParts = cClean.split(".").mapNotNull { it.toIntOrNull() }
         val maxLen = maxOf(rParts.size, cParts.size)
         for (i in 0 until maxLen) {
             val r = rParts.getOrElse(i) { 0 }

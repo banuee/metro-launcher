@@ -91,6 +91,7 @@ class TileDragResizeTest {
             val c = node.localCenter()
             node.performTouchInput { swipe(c, c + Offset(600f, 0f), 900) }
         }
+        rule.waitForIdle()
         rule.waitUntil(5000) { currentIds().indexOf(id) > before }
     }
 

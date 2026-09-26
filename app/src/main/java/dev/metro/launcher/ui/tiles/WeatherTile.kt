@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -88,14 +89,17 @@ fun rememberWeatherUi(repo: WeatherRepository): WeatherUiState {
 }
 
 /**
- * Погода 2x2 как в шелле: акцент-иконка, температура тонко крупно,
- * описание. Тап — раскрытие вниз.
+ * Погода Metro:
+ * Поддерживает адаптивные размеры под 1x1, 2x1, 2x2, 4x1, 4x2.
+ * Тап — раскрытие подробной панели вниз.
  */
 @Composable
 fun WeatherTile(
     ui: WeatherUiState,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    colSpan: Int = 2,
+    rowSpan: Int = 2,
     width: Dp = Dp.Unspecified,
     height: Dp = MetroDimens.tileH(2),
     onLongPress: (() -> Unit)? = null,
@@ -108,38 +112,307 @@ fun WeatherTile(
         height = height,
         onLongPress = onLongPress,
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            when (val s = ui.state) {
-                is WeatherState.Loading -> Text("…", color = scheme.textDim, fontSize = 40.sp)
-                is WeatherState.Error -> Text(
-                    "нет сети",
-                    color = scheme.textDim,
-                    fontSize = 14.sp,
-                    fontFamily = MetroFonts.text,
-                )
-                is WeatherState.Data -> {
-                    WeatherIcon(
-                        code = s.now.code,
-                        color = scheme.accent,
-                        size = 48.dp,
-                        fontSize = 42.sp,
-                    )
-                    Spacer(Modifier.height(2.dp))
+        when (val s = ui.state) {
+            is WeatherState.Loading -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        text = "${s.now.temp.roundToInt()}°",
-                        color = scheme.text,
-                        fontSize = 44.sp,
-                        fontFamily = MetroFonts.headline,
-                        fontWeight = FontWeight.Light,
-                    )
-                    Text(
-                        text = weatherText(s.now.code),
+                        "…",
                         color = scheme.textDim,
-                        fontSize = 12.sp,
+                        fontSize = if (colSpan == 1 && rowSpan == 1) 24.sp else 38.sp,
+                    )
+                }
+            }
+            is WeatherState.Error -> {
+                Box(Modifier.fillMaxSize().padding(8.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        "нет сети",
+                        color = scheme.textDim,
+                        fontSize = if (colSpan == 1 && rowSpan == 1) 11.sp else 13.sp,
                         fontFamily = MetroFonts.text,
+                    )
+                }
+            }
+            is WeatherState.Data -> {
+                when {
+                    // Компактный 1x1
+                    colSpan == 1 && rowSpan == 1 -> {
+                        WeatherTile1x1(s = s, scheme = scheme)
+                    }
+
+                    // Горизонтальный 2x1 или 3x1
+                    colSpan in 2..3 && rowSpan == 1 -> {
+                        WeatherTile2x1(s = s, scheme = scheme)
+                    }
+
+                    // Широкий 4x1 с метриками
+                    colSpan >= 4 && rowSpan == 1 -> {
+                        WeatherTile4x1(s = s, scheme = scheme)
+                    }
+
+                    // Большой 3x2 / 4x2 с прогнозом на 4 дня рядом
+                    colSpan >= 3 && rowSpan >= 2 -> {
+                        WeatherTileLarge(s = s, scheme = scheme)
+                    }
+
+                    // Стандартный 2x2
+                    else -> {
+                        WeatherTile2x2(s = s, scheme = scheme)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 1x1: Компактная погода */
+@Composable
+private fun WeatherTile1x1(s: WeatherState.Data, scheme: dev.metro.launcher.ui.theme.MetroScheme) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        WeatherIcon(
+            code = s.now.code,
+            color = scheme.accent,
+            size = 28.dp,
+            fontSize = 24.sp,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = "${s.now.temp.roundToInt()}°",
+            color = scheme.text,
+            fontSize = 22.sp,
+            fontFamily = MetroFonts.headline,
+            fontWeight = FontWeight.Light,
+        )
+        Text(
+            text = weatherText(s.now.code),
+            color = scheme.textDim,
+            fontSize = 9.5.sp,
+            fontFamily = MetroFonts.text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** 2x1: Горизонтальный вид */
+@Composable
+private fun WeatherTile2x1(s: WeatherState.Data, scheme: dev.metro.launcher.ui.theme.MetroScheme) {
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        WeatherIcon(
+            code = s.now.code,
+            color = scheme.accent,
+            size = 40.dp,
+            fontSize = 34.sp,
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = "${s.now.temp.roundToInt()}°",
+                    color = scheme.text,
+                    fontSize = 34.sp,
+                    fontFamily = MetroFonts.headline,
+                    fontWeight = FontWeight.Light,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = s.city.name,
+                    color = scheme.textDim,
+                    fontSize = 12.sp,
+                    fontFamily = MetroFonts.text,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
+            Text(
+                text = weatherText(s.now.code),
+                color = scheme.textDim,
+                fontSize = 11.5.sp,
+                fontFamily = MetroFonts.text,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** 4x1: Полноразмерный ряд с текущей погодой и деталями */
+@Composable
+private fun WeatherTile4x1(s: WeatherState.Data, scheme: dev.metro.launcher.ui.theme.MetroScheme) {
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        WeatherIcon(
+            code = s.now.code,
+            color = scheme.accent,
+            size = 42.dp,
+            fontSize = 36.sp,
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    text = "${s.now.temp.roundToInt()}°",
+                    color = scheme.text,
+                    fontSize = 36.sp,
+                    fontFamily = MetroFonts.headline,
+                    fontWeight = FontWeight.Light,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = s.city.name,
+                    color = scheme.text,
+                    fontSize = 13.sp,
+                    fontFamily = MetroFonts.text,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
+            Text(
+                text = weatherText(s.now.code),
+                color = scheme.textDim,
+                fontSize = 12.sp,
+                fontFamily = MetroFonts.text,
+            )
+        }
+
+        Spacer(Modifier.width(16.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("ОЩУЩАЕТСЯ", color = scheme.textDim, fontSize = 9.sp, fontFamily = MetroFonts.text)
+                Text("${s.now.feelsLike.roundToInt()}°", color = scheme.text, fontSize = 13.sp, fontFamily = MetroFonts.text)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("ВЕТЕР", color = scheme.textDim, fontSize = 9.sp, fontFamily = MetroFonts.text)
+                Text("${s.now.wind.roundToInt()} м/с", color = scheme.text, fontSize = 13.sp, fontFamily = MetroFonts.text)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("ВЛАЖНОСТЬ", color = scheme.textDim, fontSize = 9.sp, fontFamily = MetroFonts.text)
+                Text("${s.now.humidity}%", color = scheme.text, fontSize = 13.sp, fontFamily = MetroFonts.text)
+            }
+        }
+    }
+}
+
+/** 2x2: Стандартная плитка */
+@Composable
+private fun WeatherTile2x2(s: WeatherState.Data, scheme: dev.metro.launcher.ui.theme.MetroScheme) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        WeatherIcon(
+            code = s.now.code,
+            color = scheme.accent,
+            size = 46.dp,
+            fontSize = 40.sp,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = "${s.now.temp.roundToInt()}°",
+            color = scheme.text,
+            fontSize = 42.sp,
+            fontFamily = MetroFonts.headline,
+            fontWeight = FontWeight.Light,
+        )
+        Text(
+            text = weatherText(s.now.code),
+            color = scheme.text,
+            fontSize = 12.5.sp,
+            fontFamily = MetroFonts.text,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = "${s.city.name} · ощущ. ${s.now.feelsLike.roundToInt()}°",
+            color = scheme.textDim,
+            fontSize = 11.sp,
+            fontFamily = MetroFonts.text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** 3x2 / 4x2: Большой информативный виджет */
+@Composable
+private fun WeatherTileLarge(s: WeatherState.Data, scheme: dev.metro.launcher.ui.theme.MetroScheme) {
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Левая половина: текущая
+        Column(
+            modifier = Modifier.weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            WeatherIcon(
+                code = s.now.code,
+                color = scheme.accent,
+                size = 48.dp,
+                fontSize = 42.sp,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "${s.now.temp.roundToInt()}°",
+                color = scheme.text,
+                fontSize = 42.sp,
+                fontFamily = MetroFonts.headline,
+                fontWeight = FontWeight.Light,
+            )
+            Text(
+                text = weatherText(s.now.code),
+                color = scheme.text,
+                fontSize = 13.sp,
+                fontFamily = MetroFonts.text,
+            )
+            Text(
+                text = s.city.name,
+                color = scheme.textDim,
+                fontSize = 11.5.sp,
+                fontFamily = MetroFonts.text,
+            )
+        }
+
+        Spacer(Modifier.width(8.dp))
+
+        // Правая половина: 4 дня прогноза
+        if (s.daily.isNotEmpty()) {
+            Column(
+                modifier = Modifier.weight(1.2f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                val days = s.daily.take(4)
+                val wMin = days.minOf { it.tMin }
+                val wMax = days.maxOf { it.tMax }
+                days.forEachIndexed { i, d ->
+                    DayRow(
+                        name = dayNameRu(d.date, i),
+                        highlight = i == 0,
+                        code = d.code,
+                        tMin = d.tMin,
+                        tMax = d.tMax,
+                        wMin = wMin,
+                        wMax = wMax,
                     )
                 }
             }

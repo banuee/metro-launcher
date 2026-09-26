@@ -10,13 +10,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -39,6 +43,7 @@ import dev.metro.launcher.ui.theme.LocalMetroScheme
 import dev.metro.launcher.ui.theme.MetroDimens
 import dev.metro.launcher.ui.theme.MetroFonts
 import dev.metro.launcher.ui.theme.TileFrame
+import dev.metro.launcher.ui.theme.metroClickable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import java.text.SimpleDateFormat
@@ -58,12 +63,27 @@ private val MonthsNominativeRu = arrayOf(
     "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
     "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
 )
+private val MonthsShortRu = arrayOf(
+    "янв", "фев", "мар", "апр", "мая", "июн",
+    "июл", "авг", "сен", "окт", "ноя", "дек",
+)
 
 /** Порт ruDate() из TopPanel.qml: "вторник, 22 сентября". */
 fun ruDate(date: Date): String {
     val cal = Calendar.getInstance().apply { time = date }
     return "${DaysRu[cal.get(Calendar.DAY_OF_WEEK) - 1]}, " +
         "${cal.get(Calendar.DAY_OF_MONTH)} ${MonthsRu[cal.get(Calendar.MONTH)]}"
+}
+
+fun ruShortDate(date: Date): String {
+    val cal = Calendar.getInstance().apply { time = date }
+    val day = cal.get(Calendar.DAY_OF_MONTH)
+    return "$day ${MonthsShortRu[cal.get(Calendar.MONTH)]}"
+}
+
+fun ruWeekday(date: Date): String {
+    val cal = Calendar.getInstance().apply { time = date }
+    return DaysRu[cal.get(Calendar.DAY_OF_WEEK) - 1]
 }
 
 fun ruMonthYear(date: Date): String {
@@ -74,7 +94,7 @@ fun ruMonthYear(date: Date): String {
 /** Данные календаря на текущий месяц для сетки 7 колонок. */
 private data class MonthGridData(
     val title: String,
-    val shift: Int, // количество пустых ячеек до 1 числа (0..6, пн = 0)
+    val shift: Int,
     val totalDays: Int,
     val currentDay: Int,
 )
@@ -90,7 +110,6 @@ private fun getMonthGridData(date: Date): MonthGridData {
         set(Calendar.MONTH, currentMonth)
         set(Calendar.DAY_OF_MONTH, 1)
     }
-    // Sunday=1, Monday=2 -> shift for Monday-first: (dayOfWeek + 5) % 7
     val shift = (firstCal.get(Calendar.DAY_OF_WEEK) + 5) % 7
     val totalDays = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
 
@@ -103,16 +122,18 @@ private fun getMonthGridData(date: Date): MonthGridData {
 }
 
 /**
- * Плитка часов / календаря (ClockW из TopPanel.qml):
- * - Свайп влево/вправо переворачивает плитку (3D flip) между часами и календарем.
- * - Клик на стороне часов запускает приложение часов.
- * - Клик на стороне календаря запускает календарь.
+ * Плитка часов / календаря:
+ * Адаптивна под все размеры (1x1, 2x1, 2x2, 4x1, 4x2).
+ * - В 1x1, 2x1, 2x2: свайп переворачивает (3D flip) между часами и календарем.
+ * - В 3x2 / 4x2: одновременный показ часов и полного календаря рядом.
  */
 @Composable
 fun ClockTile(
     onClickClock: () -> Unit,
     onClickCalendar: () -> Unit,
     modifier: Modifier = Modifier,
+    colSpan: Int = 2,
+    rowSpan: Int = 2,
     width: Dp = Dp.Unspecified,
     height: Dp = MetroDimens.tileH(2),
     onLongPress: (() -> Unit)? = null,
@@ -143,50 +164,352 @@ fun ClockTile(
 
     var dragAccumulator by remember { mutableFloatStateOf(0f) }
 
+    // Для широких больших плиток (3x2, 4x2+) показываем Часы + Календарь одновременно
+    val isDualLayout = colSpan >= 3 && rowSpan >= 2
+
     TileFrame(
         onClick = {
-            if (showCal) onClickCalendar() else onClickClock()
+            if (isDualLayout) onClickClock()
+            else if (showCal) onClickCalendar()
+            else onClickClock()
         },
         modifier = modifier
-            .pointerInput(showCal) {
-                detectHorizontalDragGestures(
-                    onDragStart = { dragAccumulator = 0f },
-                    onDragEnd = {
-                        if (abs(dragAccumulator) > 36.dp.toPx()) {
-                            showCal = !showCal
+            .then(
+                if (!isDualLayout) {
+                    Modifier
+                        .pointerInput(showCal) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { dragAccumulator = 0f },
+                                onDragEnd = {
+                                    if (abs(dragAccumulator) > 36.dp.toPx()) {
+                                        showCal = !showCal
+                                    }
+                                    dragAccumulator = 0f
+                                },
+                                onDragCancel = { dragAccumulator = 0f },
+                            ) { _, dragAmount ->
+                                dragAccumulator += dragAmount
+                            }
                         }
-                        dragAccumulator = 0f
-                    },
-                    onDragCancel = { dragAccumulator = 0f },
-                ) { _, dragAmount ->
-                    dragAccumulator += dragAmount
-                }
-            }
-            .graphicsLayer {
-                rotationY = rotation
-                cameraDistance = 16f * density
-            },
+                        .graphicsLayer {
+                            rotationY = rotation
+                            cameraDistance = 16f * density
+                        }
+                } else Modifier
+            ),
         width = width,
         height = height,
         background = scheme.accent.copy(alpha = 0.92f),
         onLongPress = onLongPress,
     ) {
-        if (rotation <= 90f) {
+        if (isDualLayout) {
+            // Комбинированный режим для больших плиток
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Левая половина: часы
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .metroClickable(targetScale = 0.96f) { onClickClock() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ClockFace(
+                        time = time,
+                        date = date,
+                        minuteFraction = minuteFraction,
+                        fontSize = 50.sp,
+                    )
+                }
+
+                VerticalDivider(
+                    color = Color.White.copy(alpha = 0.20f),
+                    thickness = 1.dp,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                )
+
+                // Правая половина: календарь
+                Box(
+                    modifier = Modifier
+                        .weight(1.1f)
+                        .fillMaxHeight()
+                        .metroClickable(targetScale = 0.96f) { onClickCalendar() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CalendarFace(date = now)
+                }
+            }
+        } else if (rotation <= 90f) {
             // Лицевая сторона: Часы
-            ClockFace(
-                time = time,
-                date = date,
-                minuteFraction = minuteFraction,
-            )
+            when {
+                colSpan == 1 && rowSpan == 1 -> {
+                    ClockFace1x1(
+                        time = time,
+                        date = now,
+                        minuteFraction = minuteFraction,
+                    )
+                }
+                colSpan >= 2 && rowSpan == 1 -> {
+                    ClockFaceWide(
+                        time = time,
+                        date = now,
+                        minuteFraction = minuteFraction,
+                    )
+                }
+                else -> {
+                    ClockFace(
+                        time = time,
+                        date = date,
+                        minuteFraction = minuteFraction,
+                    )
+                }
+            }
         } else {
-            // Обратная сторона: Календарь (разворачиваем обратно на 180°, чтобы не было зеркально)
+            // Обратная сторона: Календарь
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer { rotationY = 180f },
                 contentAlignment = Alignment.Center,
             ) {
-                CalendarFace(date = now)
+                when {
+                    colSpan == 1 && rowSpan == 1 -> {
+                        CalendarFace1x1(date = now)
+                    }
+                    colSpan >= 2 && rowSpan == 1 -> {
+                        CalendarFaceWide(date = now)
+                    }
+                    else -> {
+                        CalendarFace(date = now)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 1x1: Компактные часы */
+@Composable
+private fun ClockFace1x1(
+    time: String,
+    date: Date,
+    minuteFraction: Float,
+) {
+    Box(Modifier.fillMaxSize().padding(6.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = time,
+                color = Color.White,
+                fontSize = 24.sp,
+                fontFamily = MetroFonts.headline,
+                fontWeight = FontWeight.Light,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = ruShortDate(date),
+                color = Color.White.copy(alpha = 0.85f),
+                fontSize = 10.5.sp,
+                fontFamily = MetroFonts.text,
+                fontWeight = FontWeight.Medium,
+            )
+        }
+
+        // Секундная полоска
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 2.dp)
+                .fillMaxWidth(0.8f)
+                .height(2.dp)
+                .clip(RoundedCornerShape(1.dp))
+                .background(Color.White.copy(alpha = 0.25f)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(fraction = minuteFraction)
+                    .height(2.dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(Color.White.copy(alpha = 0.9f)),
+            )
+        }
+    }
+}
+
+/** 1x1: Календарь с крупным числом дня */
+@Composable
+private fun CalendarFace1x1(date: Date) {
+    val cal = Calendar.getInstance().apply { time = date }
+    val day = cal.get(Calendar.DAY_OF_MONTH)
+    val monthName = MonthsShortRu[cal.get(Calendar.MONTH)].uppercase(Locale.getDefault())
+    val weekday = ruWeekday(date).uppercase(Locale.getDefault())
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = "$day",
+            color = Color.White,
+            fontSize = 32.sp,
+            fontFamily = MetroFonts.headline,
+            fontWeight = FontWeight.Light,
+        )
+        Text(
+            text = monthName,
+            color = Color.White.copy(alpha = 0.9f),
+            fontSize = 10.sp,
+            fontFamily = MetroFonts.text,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 1.sp,
+        )
+        Text(
+            text = weekday,
+            color = Color.White.copy(alpha = 0.7f),
+            fontSize = 9.sp,
+            fontFamily = MetroFonts.text,
+        )
+    }
+}
+
+/** 2x1 / 3x1: Горизонтальные часы */
+@Composable
+private fun ClockFaceWide(
+    time: String,
+    date: Date,
+    minuteFraction: Float,
+) {
+    Box(Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 10.dp)) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = time,
+                color = Color.White,
+                fontSize = 38.sp,
+                fontFamily = MetroFonts.headline,
+                fontWeight = FontWeight.Light,
+            )
+
+            val cal = remember(date) { Calendar.getInstance().apply { setTime(date) } }
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    text = ruWeekday(date),
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    fontFamily = MetroFonts.text,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "${cal.get(Calendar.DAY_OF_MONTH)} ${MonthsRu[cal.get(Calendar.MONTH)]}",
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 11.5.sp,
+                    fontFamily = MetroFonts.text,
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(2.dp)
+                .clip(RoundedCornerShape(1.dp))
+                .background(Color.White.copy(alpha = 0.25f)),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(fraction = minuteFraction)
+                    .height(2.dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(Color.White.copy(alpha = 0.9f)),
+            )
+        }
+    }
+}
+
+/** 2x1: Горизонтальный календарь с текущей неделей */
+@Composable
+private fun CalendarFaceWide(date: Date) {
+    val cal = Calendar.getInstance().apply { time = date }
+    val currentDay = cal.get(Calendar.DAY_OF_MONTH)
+    val weekHeaders = remember { listOf("П", "В", "С", "Ч", "П", "С", "В") }
+
+    // Вычисляем дни текущей недели
+    val currentDayOfWeek = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 // 0 = пн
+    val calWeek = Calendar.getInstance().apply {
+        time = date
+        add(Calendar.DAY_OF_MONTH, -currentDayOfWeek)
+    }
+    val weekDays = (0..6).map {
+        val d = calWeek.get(Calendar.DAY_OF_MONTH)
+        calWeek.add(Calendar.DAY_OF_MONTH, 1)
+        d
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 14.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = ruMonthYear(date),
+            color = Color.White,
+            fontSize = 12.sp,
+            fontFamily = MetroFonts.headline,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(bottom = 6.dp),
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            weekHeaders.forEachIndexed { idx, h ->
+                val dayNum = weekDays.getOrElse(idx) { 0 }
+                val isToday = idx == currentDayOfWeek
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = h,
+                        color = Color.White.copy(alpha = 0.75f),
+                        fontSize = 10.sp,
+                        fontFamily = MetroFonts.text,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    if (isToday) {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(Color.White),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "$dayNum",
+                                color = LocalMetroScheme.current.accent,
+                                fontSize = 11.sp,
+                                fontFamily = MetroFonts.text,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    } else {
+                        Box(modifier = Modifier.size(20.dp), contentAlignment = Alignment.Center) {
+                            Text(
+                                text = "$dayNum",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontFamily = MetroFonts.text,
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -197,26 +520,26 @@ private fun ClockFace(
     time: String,
     date: String,
     minuteFraction: Float,
+    fontSize: androidx.compose.ui.unit.TextUnit = 54.sp,
 ) {
-    val scheme = LocalMetroScheme.current
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = time,
-                color = scheme.text,
-                fontSize = 54.sp,
+                color = Color.White,
+                fontSize = fontSize,
                 fontFamily = MetroFonts.headline,
                 fontWeight = FontWeight.Light,
             )
             Text(
                 text = date,
-                color = scheme.textDim,
+                color = Color.White.copy(alpha = 0.85f),
                 fontSize = 12.sp,
                 fontFamily = MetroFonts.text,
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
-        // Секундная полоска (Metro Live Tiles)
+        // Секундная полоска
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
