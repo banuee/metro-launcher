@@ -462,11 +462,14 @@ fun HomeGrid(
                                 val rawRow = (((adjustedTouchY - paddingPx) / (rowHeightPx + gapPx)).toInt()).coerceAtLeast(0)
                                 val row = rawRow.coerceAtMost(footerRow)
                                 val hits = if (row < footerRow) GridPacker.rectHits(latestTiles, col, row, 1, 1) else null
-                                if (hits == null) {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    onEmptyCellLongClick(col, row)
-                                    onEmptyLongClick()
+                                val (targetCol, targetRow) = if (hits == null) {
+                                    Pair(col, row)
+                                } else {
+                                    GridPacker.nearestFree(latestTiles, 1, 1, col, row) ?: Pair(col, footerRow)
                                 }
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onEmptyCellLongClick(targetCol, targetRow)
+                                onEmptyLongClick()
                             },
                         )
                     },

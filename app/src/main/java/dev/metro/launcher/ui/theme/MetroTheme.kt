@@ -108,10 +108,17 @@ fun MetroTheme(
         }
     }
 
+    val baseGlassColor = remember(settings.glassColor) {
+        Color(settings.glassColor)
+    }
+
     val scheme = MetroScheme(
         accent = effectiveAccent,
-        glass = Color.White.copy(alpha = settings.glassAlpha),
-        glassHover = Color.White.copy(alpha = (settings.glassAlpha * 1.8f).coerceAtMost(0.40f)),
+        glass = baseGlassColor.copy(alpha = settings.glassAlpha),
+        glassHover = baseGlassColor.copy(
+            alpha = if (settings.glassAlpha <= 0.01f) 0.08f
+                    else (settings.glassAlpha * 1.5f).coerceAtMost(1.0f)
+        ),
         glassDeep = Color(0xFF101010).copy(alpha = settings.glassDeepAlpha),
         stroke = Color.White.copy(alpha = settings.strokeAlpha),
         strokeStrong = Color.White.copy(alpha = (settings.strokeAlpha * 1.8f).coerceAtMost(0.50f)),

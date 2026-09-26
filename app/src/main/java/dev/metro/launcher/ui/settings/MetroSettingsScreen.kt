@@ -43,11 +43,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.graphics.ColorUtils
+import dev.metro.launcher.ui.theme.MetroDimens
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -317,7 +321,7 @@ private fun HubSection(onNavigate: (SettingsSection) -> Unit) {
                 section = SettingsSection.GLASS,
                 glyph = "\uf2d0",
                 title = "Блюр и прозрачность стекла",
-                subtitle = "Радиус блюра, прозрачность плиток, меню и границ",
+                subtitle = "Цвет и прозрачность плиток, радиус блюра, шторки",
             ),
             HubItem(
                 section = SettingsSection.UPDATES,
@@ -595,21 +599,23 @@ private fun ColorsSection(
                     animationSpec = tween(200),
                     label = "palette-alpha",
                 )
-                Row(
+                LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
                         .alpha(paletteAlpha),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    palette.forEach { colorInt ->
+                    items(palette) { colorInt ->
                         val isSelected = !settings.autoAccent && settings.accentColor == colorInt
+                        val isLight = remember(colorInt) { ColorUtils.calculateLuminance(colorInt) > 0.55 }
+                        val checkColor = if (isLight) Color.Black else Color.White
                         val borderW by animateDpAsState(
                             targetValue = if (isSelected) 3.dp else 1.dp,
                             animationSpec = tween(200, easing = MetroAnimations.OpenEasing),
                             label = "swatch-bw",
                         )
                         val borderColor by animateColorAsState(
-                            targetValue = if (isSelected) Color.White else Color.White.copy(alpha = 0.25f),
+                            targetValue = if (isSelected) checkColor else Color.White.copy(alpha = 0.25f),
                             animationSpec = tween(200),
                             label = "swatch-bc",
                         )
@@ -640,7 +646,7 @@ private fun ColorsSection(
                                 enter = fadeIn(tween(150)) + scaleIn(initialScale = 0.5f),
                                 exit = fadeOut(tween(100)) + scaleOut(targetScale = 0.5f),
                             ) {
-                                MetroIcon(icon = "\uf00c", fontSize = 16.sp, color = Color.White)
+                                MetroIcon(icon = "\uf00c", fontSize = 16.sp, color = checkColor)
                             }
                         }
                     }
@@ -775,6 +781,7 @@ private fun GlassSection(
 ) {
     val scheme = LocalMetroScheme.current
     val settings by settingsRepo.settings.collectAsState()
+    var showGlassColorPicker by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -867,7 +874,7 @@ private fun GlassSection(
             }
         }
 
-        // Прозрачность плиток
+        // Настройка подложки плиток (Цвет и прозрачность)
         item {
             Box(
                 modifier = Modifier
@@ -881,13 +888,24 @@ private fun GlassSection(
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = "Подложка плиток (glass)",
-                            color = scheme.text,
-                            fontSize = 14.sp,
-                            fontFamily = MetroFonts.text,
-                        )
+                        Column {
+                            Text(
+                                text = "Подложка плиток (glass)",
+                                color = scheme.text,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = MetroFonts.text,
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = "Цвет и прозрачность фона плиток",
+                                color = scheme.textDim,
+                                fontSize = 12.sp,
+                                fontFamily = MetroFonts.text,
+                            )
+                        }
                         Text(
                             text = "${(settings.glassAlpha * 100).toInt()}%",
                             color = scheme.accent,
@@ -896,16 +914,157 @@ private fun GlassSection(
                             fontFamily = MetroFonts.text,
                         )
                     }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // Мини-превью плитки с текущим цветом и прозрачностью
+                    val currentGlassBg = remember(settings.glassColor, settings.glassAlpha) {
+                        Color(settings.glassColor).copy(alpha = settings.glassAlpha)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(58.dp)
+                            .clip(RoundedCornerShape(MetroDimens.radius))
+                            .background(currentGlassBg)
+                            .border(1.dp, scheme.strokeStrong, RoundedCornerShape(MetroDimens.radius))
+                            .padding(horizontal = 14.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(scheme.accent.copy(alpha = 0.20f))
+                                    .border(1.dp, scheme.accent.copy(alpha = 0.45f), RoundedCornerShape(6.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                MetroIcon(icon = "\uf001", fontSize = 15.sp, color = scheme.accent)
+                            }
+                            Column {
+                                Text(
+                                    text = "Образец плитки",
+                                    color = scheme.text,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontFamily = MetroFonts.text,
+                                )
+                                val hexStr = "%06X".format(settings.glassColor and 0xFFFFFF)
+                                val alphaPct = (settings.glassAlpha * 100).toInt()
+                                Text(
+                                    text = "#$hexStr • $alphaPct%",
+                                    color = scheme.textDim,
+                                    fontSize = 11.sp,
+                                    fontFamily = MetroFonts.text,
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(14.dp))
+
+                    Text(
+                        text = "ПРОЗРАЧНОСТЬ",
+                        fontSize = 10.sp,
+                        fontFamily = MetroFonts.text,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.textDim,
+                        letterSpacing = 1.sp,
+                    )
                     Slider(
                         value = settings.glassAlpha,
                         onValueChange = { settingsRepo.setGlassAlpha(it) },
-                        valueRange = 0.00f..0.30f,
+                        valueRange = 0.00f..1.00f,
                         colors = SliderDefaults.colors(
                             thumbColor = scheme.accent,
                             activeTrackColor = scheme.accent,
                             inactiveTrackColor = scheme.glassHover,
                         ),
                     )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Text(
+                        text = "ЦВЕТ ПОДЛОЖКИ",
+                        fontSize = 10.sp,
+                        fontFamily = MetroFonts.text,
+                        fontWeight = FontWeight.SemiBold,
+                        color = scheme.textDim,
+                        letterSpacing = 1.sp,
+                    )
+                    Spacer(Modifier.height(8.dp))
+
+                    val standardPresets = remember(scheme.accent) {
+                        listOf(
+                            0xFFFFFFFF.toInt(), // Белый (quickshell дефолт)
+                            0xFF1C1E24.toInt(), // Тёмный графит
+                            0xFF000000.toInt(), // Глубокий чёрный (OLED)
+                            scheme.accent.toArgb(), // Акцент темы
+                        )
+                    }
+                    val allColorOptions = remember(standardPresets, settings.generatedPalette) {
+                        (standardPresets + settings.generatedPalette).distinct()
+                    }
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        items(allColorOptions) { colorInt ->
+                            val isSelected = settings.glassColor == colorInt
+                            val isLight = remember(colorInt) { ColorUtils.calculateLuminance(colorInt) > 0.55 }
+                            val checkColor = if (isLight) Color.Black else Color.White
+                            val borderColor = if (isSelected) checkColor else Color.White.copy(alpha = 0.20f)
+                            val borderW = if (isSelected) 2.5.dp else 1.dp
+                            val scale by animateFloatAsState(if (isSelected) 1.08f else 1.0f, label = "glass-scale")
+
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .graphicsLayer(scaleX = scale, scaleY = scale)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(colorInt))
+                                    .border(borderW, borderColor, RoundedCornerShape(8.dp))
+                                    .metroClickable(targetScale = 0.90f, onClick = { settingsRepo.setGlassColor(colorInt) }),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (isSelected) {
+                                    MetroIcon(icon = "\uf00c", fontSize = 14.sp, color = checkColor)
+                                }
+                            }
+                        }
+
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .height(38.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(scheme.glassHover)
+                                    .border(1.dp, scheme.strokeStrong, RoundedCornerShape(8.dp))
+                                    .metroClickable(targetScale = 0.92f, onClick = { showGlassColorPicker = true })
+                                    .padding(horizontal = 10.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    MetroIcon(icon = "\uf1fb", fontSize = 12.sp, color = scheme.text)
+                                    Text(
+                                        text = "Свой...",
+                                        color = scheme.text,
+                                        fontSize = 11.sp,
+                                        fontFamily = MetroFonts.text,
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1010,13 +1169,16 @@ private fun GlassSection(
 
             val previewGlassAlpha by animateFloatAsState(settings.glassAlpha, tween(150), label = "prev-glass")
             val previewStrokeAlpha by animateFloatAsState(settings.strokeAlpha, tween(150), label = "prev-stroke")
+            val previewGlassBg = remember(settings.glassColor, previewGlassAlpha) {
+                Color(settings.glassColor).copy(alpha = previewGlassAlpha)
+            }
 
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(96.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White.copy(alpha = previewGlassAlpha))
+                    .background(previewGlassBg)
                     .border(1.dp, Color.White.copy(alpha = previewStrokeAlpha), RoundedCornerShape(12.dp))
                     .padding(16.dp),
             ) {
@@ -1074,6 +1236,17 @@ private fun GlassSection(
                 )
             }
         }
+    }
+
+    if (showGlassColorPicker) {
+        MetroColorPickerSheet(
+            initialColor = settings.glassColor,
+            onColorSelected = { color ->
+                settingsRepo.setGlassColor(color)
+                showGlassColorPicker = false
+            },
+            onDismiss = { showGlassColorPicker = false },
+        )
     }
 }
 

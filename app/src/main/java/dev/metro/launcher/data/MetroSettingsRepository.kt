@@ -31,7 +31,8 @@ data class MetroSettings(
     val generatedPalette: List<Int> = emptyList(),
     val blurEnabled: Boolean = true,
     val blurRadius: Int = 14,
-    val glassAlpha: Float = 0.07f,
+    val glassColor: Int = 0xFFFFFFFF.toInt(), // Цвет подложки плиток
+    val glassAlpha: Float = 0.07f,            // Прозрачность подложки (0..1.0)
     val glassDeepAlpha: Float = 0.35f,
     val strokeAlpha: Float = 0.08f,
 )
@@ -45,6 +46,7 @@ class MetroSettingsRepository(private val context: Context) {
         private val KEY_GENERATED_PALETTE = stringPreferencesKey("generated_palette")
         private val KEY_BLUR_ENABLED = booleanPreferencesKey("blur_enabled")
         private val KEY_BLUR_RADIUS = intPreferencesKey("blur_radius")
+        private val KEY_GLASS_COLOR = intPreferencesKey("glass_color")
         private val KEY_GLASS_ALPHA = floatPreferencesKey("glass_alpha")
         private val KEY_GLASS_DEEP_ALPHA = floatPreferencesKey("glass_deep_alpha")
         private val KEY_STROKE_ALPHA = floatPreferencesKey("stroke_alpha")
@@ -70,6 +72,7 @@ class MetroSettingsRepository(private val context: Context) {
             generatedPalette = palette,
             blurEnabled = prefs[KEY_BLUR_ENABLED] ?: true,
             blurRadius = prefs[KEY_BLUR_RADIUS] ?: 14,
+            glassColor = prefs[KEY_GLASS_COLOR] ?: 0xFFFFFFFF.toInt(),
             glassAlpha = prefs[KEY_GLASS_ALPHA] ?: 0.07f,
             glassDeepAlpha = prefs[KEY_GLASS_DEEP_ALPHA] ?: 0.35f,
             strokeAlpha = prefs[KEY_STROKE_ALPHA] ?: 0.08f,
@@ -129,8 +132,16 @@ class MetroSettingsRepository(private val context: Context) {
         }
     }
 
+    fun setGlassColor(color: Int) {
+        scope.launch {
+            context.settingsStore.edit { prefs ->
+                prefs[KEY_GLASS_COLOR] = color
+            }
+        }
+    }
+
     fun setGlassAlpha(alpha: Float) {
-        val clamped = alpha.coerceIn(0.00f, 0.35f)
+        val clamped = alpha.coerceIn(0.00f, 1.00f)
         scope.launch {
             context.settingsStore.edit { prefs ->
                 prefs[KEY_GLASS_ALPHA] = clamped
@@ -161,6 +172,7 @@ class MetroSettingsRepository(private val context: Context) {
             context.settingsStore.edit { prefs ->
                 prefs[KEY_BLUR_ENABLED] = DEFAULT.blurEnabled
                 prefs[KEY_BLUR_RADIUS] = DEFAULT.blurRadius
+                prefs[KEY_GLASS_COLOR] = DEFAULT.glassColor
                 prefs[KEY_GLASS_ALPHA] = DEFAULT.glassAlpha
                 prefs[KEY_GLASS_DEEP_ALPHA] = DEFAULT.glassDeepAlpha
                 prefs[KEY_STROKE_ALPHA] = DEFAULT.strokeAlpha
