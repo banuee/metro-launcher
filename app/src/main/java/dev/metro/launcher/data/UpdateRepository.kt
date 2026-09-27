@@ -40,6 +40,27 @@ class UpdateRepository(private val context: Context) {
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState
 
+    init {
+        cleanOldApks(BuildConfig.VERSION_NAME)
+    }
+
+    fun cleanOldApks(activeVersion: String) {
+        try {
+            val updatesDir = File(app.cacheDir, "updates")
+            if (updatesDir.exists()) {
+                val apks = updatesDir.listFiles { _, name -> name.endsWith(".apk", ignoreCase = true) }
+                apks?.forEach { apk ->
+                    val apkVer = apk.name.removePrefix("metro-launcher-").removeSuffix(".apk")
+                    if (!isNewerVersion(apkVer, activeVersion) || apkVer == activeVersion) {
+                        apk.delete()
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to clean old update APKs: ${e.message}")
+        }
+    }
+
     companion object {
         private const val GITHUB_API_URL = "https://api.github.com/repos/banuee/metro-launcher/releases/latest"
         private const val TAG = "MetroUpdate"
@@ -102,6 +123,7 @@ class UpdateRepository(private val context: Context) {
     }
 
     suspend fun checkForUpdates() {
+        cleanOldApks(BuildConfig.VERSION_NAME)
         _updateState.value = UpdateState.Checking
         try {
             val release = fetchLatestRelease()
