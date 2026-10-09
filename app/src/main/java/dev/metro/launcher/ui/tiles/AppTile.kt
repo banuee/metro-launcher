@@ -27,7 +27,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.metro.launcher.data.AppIconLoader
 import dev.metro.launcher.data.AppInfo
+import dev.metro.launcher.ui.theme.IconShapeHelper
 import dev.metro.launcher.ui.theme.LocalMetroScheme
+import dev.metro.launcher.ui.theme.LocalMetroSettings
 import dev.metro.launcher.ui.theme.MetroDimens
 import dev.metro.launcher.ui.theme.MetroFonts
 import dev.metro.launcher.ui.theme.TileFrame
@@ -47,6 +49,7 @@ fun AppTile(
     onLongPress: (() -> Unit)? = null,
 ) {
     val scheme = LocalMetroScheme.current
+    val settings = LocalMetroSettings.current
     val context = LocalContext.current
     val iconRevision by AppIconLoader.revisions.collectAsState()
     val bitmap by produceState(
@@ -57,6 +60,10 @@ fun AppTile(
     ) {
         value = AppIconLoader.loadAppIcon(context, app.packageName, app)
     }
+
+    val iconScale = settings.tileIconScale
+    val smallIconSize = (44 * iconScale).dp
+    val largeIconSize = (54 * iconScale).dp
 
     TileFrame(
         onClick = onClick,
@@ -76,9 +83,11 @@ fun AppTile(
                         Image(
                             bitmap = icon,
                             contentDescription = app.label,
-                            modifier = Modifier.size(44.dp),
+                            modifier = Modifier
+                                .size(smallIconSize)
+                                .then(IconShapeHelper.applyShape(Modifier, settings.iconShape)),
                         )
-                    } ?: Box(modifier = Modifier.size(44.dp))
+                    } ?: Box(modifier = Modifier.size(smallIconSize))
                     Spacer(Modifier.width(12.dp))
                     Text(
                         text = app.label,
@@ -101,12 +110,13 @@ fun AppTile(
                             bitmap = icon,
                             contentDescription = app.label,
                             modifier = Modifier
-                                .size(54.dp)
-                                .align(Alignment.Center),
+                                .size(largeIconSize)
+                                .align(Alignment.Center)
+                                .then(IconShapeHelper.applyShape(Modifier, settings.iconShape)),
                         )
                     } ?: Box(
                         modifier = Modifier
-                            .size(54.dp)
+                            .size(largeIconSize)
                             .align(Alignment.Center),
                     )
                     Text(
@@ -132,9 +142,11 @@ fun AppTile(
                         Image(
                             bitmap = icon,
                             contentDescription = app.label,
-                            modifier = Modifier.size(44.dp),
+                            modifier = Modifier
+                                .size(smallIconSize)
+                                .then(IconShapeHelper.applyShape(Modifier, settings.iconShape)),
                         )
-                    } ?: Box(modifier = Modifier.size(44.dp))
+                    } ?: Box(modifier = Modifier.size(smallIconSize))
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = app.label,

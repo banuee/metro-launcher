@@ -58,6 +58,9 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
+import dev.metro.launcher.data.sortApps
+import dev.metro.launcher.ui.theme.IconShapeHelper
+import dev.metro.launcher.ui.theme.LocalMetroSettings
 import androidx.activity.compose.BackHandler
 import dev.metro.launcher.data.AppCustomizationRepository
 import dev.metro.launcher.data.AppIconLoader
@@ -111,11 +114,15 @@ fun DrawerScreen(
         apps.partition { it.packageName in hiddenPackages }
     }
 
-    val filtered = remember(visibleApps, query) {
-        if (query.isBlank()) visibleApps
+    val settings = LocalMetroSettings.current
+    val englishOnly = settings.drawerEnglishAlphabet
+
+    val filtered = remember(visibleApps, query, englishOnly) {
+        val base = if (query.isBlank()) visibleApps
         else visibleApps.filter { it.label.contains(query.trim(), ignoreCase = true) }
+        sortApps(base, englishOnly = englishOnly)
     }
-    val sectioned = remember(filtered) { sectionApps(filtered) }
+    val sectioned = remember(filtered, englishOnly) { sectionApps(filtered, englishOnly = englishOnly) }
 
     val drawerBlur by animateDpAsState(
         targetValue = if (jumpOpen) 18.dp else 0.dp,
@@ -213,6 +220,7 @@ fun DrawerScreen(
         ) {
             JumpGrid(
                 available = sectioned.headerIndex.keys,
+                englishOnly = englishOnly,
                 onPick = { letter ->
                     onJumpOpenChange(false)
                     val idx = sectioned.headerIndex[letter]
@@ -282,14 +290,13 @@ fun DrawerScreen(
                     selectedAppForMenu = null
                     try {
                         val packageUri = Uri.parse("package:${targetApp.packageName}")
-                        val intent = Intent(Intent.ACTION_UNINSTALL_PACKAGE, packageUri).apply {
-                            putExtra(Intent.EXTRA_RETURN_RESULT, true)
+                        val intent = Intent(Intent.ACTION_DELETE, packageUri).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         context.startActivity(intent)
                     } catch (_: Exception) {
                         try {
-                            val fallbackIntent = Intent(Intent.ACTION_DELETE, Uri.parse("package:${targetApp.packageName}")).apply {
+                            val fallbackIntent = Intent(Intent.ACTION_UNINSTALL_PACKAGE, Uri.parse("package:${targetApp.packageName}")).apply {
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
                             context.startActivity(fallbackIntent)
@@ -429,6 +436,7 @@ private fun AppRow(
     onLongClick: ((androidx.compose.ui.geometry.Rect?) -> Unit)? = null,
 ) {
     val scheme = LocalMetroScheme.current
+    val settings = LocalMetroSettings.current
     val context = LocalContext.current
     val iconRevision by AppIconLoader.revisions.collectAsState()
     val bitmap by produceState(
@@ -462,7 +470,10 @@ private fun AppRow(
                 ComposeImage(
                     bitmap = icon,
                     contentDescription = app.label,
-                    modifier = Modifier.size(38.dp).align(Alignment.Center),
+                    modifier = Modifier
+                        .size(38.dp)
+                        .align(Alignment.Center)
+                        .then(IconShapeHelper.applyShape(Modifier, settings.iconShape)),
                 )
             } ?: Box(
                 modifier = Modifier.size(38.dp).align(Alignment.Center),
@@ -566,6 +577,7 @@ private fun HiddenAppsSection(
 @Composable
 private fun JumpGrid(
     available: Set<String>,
+    englishOnly: Boolean = false,
     onPick: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -581,7 +593,7 @@ private fun JumpGrid(
             modifier = Modifier.padding(horizontal = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            val letters = JumpAlphabets.all
+            val letters = if (englishOnly) JumpAlphabets.englishOnly else JumpAlphabets.all
             letters.chunked(6).forEach { row ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),

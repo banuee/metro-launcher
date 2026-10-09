@@ -65,6 +65,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -104,11 +105,17 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
 
+import dev.metro.launcher.data.IconPackInfo
+import dev.metro.launcher.data.IconPackManager
+import dev.metro.launcher.ui.theme.IconShapeHelper
+import dev.metro.launcher.ui.theme.MetroIconShape
+
 enum class SettingsSection {
     HUB,
     WALLPAPER,
     COLORS,
     GLASS,
+    ICONS,
     UPDATES,
     BACKUP,
     ABOUT,
@@ -217,6 +224,9 @@ fun MetroSettingsScreen(
                     SettingsSection.GLASS -> GlassSection(
                         settingsRepo = settingsRepo,
                     )
+                    SettingsSection.ICONS -> IconsSection(
+                        settingsRepo = settingsRepo,
+                    )
                     SettingsSection.UPDATES -> UpdatesSection(
                         updateRepo = updateRepo,
                         settingsRepo = settingsRepo,
@@ -249,6 +259,7 @@ private fun SettingsHeader(
         SettingsSection.WALLPAPER -> "ОБОИ"
         SettingsSection.COLORS -> "ЦВЕТА И АКЦЕНТЫ"
         SettingsSection.GLASS -> "БЛЮР И СТЕКЛО"
+        SettingsSection.ICONS -> "ЗНАЧКИ И СПИСОК"
         SettingsSection.UPDATES -> "ОБНОВЛЕНИЯ"
         SettingsSection.BACKUP -> "РЕЗЕРВНАЯ КОПИЯ"
         SettingsSection.ABOUT -> "О ЛАУНЧЕРЕ"
@@ -352,6 +363,12 @@ private fun HubSection(onNavigate: (SettingsSection) -> Unit) {
                 glyph = "\uf2d0",
                 title = "Блюр и прозрачность стекла",
                 subtitle = "Цвет и прозрачность плиток, радиус блюра, шторки",
+            ),
+            HubItem(
+                section = SettingsSection.ICONS,
+                glyph = "\uf1b2",
+                title = "Значки и список",
+                subtitle = "Форма, размер, пакеты иконок (Icon Pack Studio), алфавит",
             ),
             HubItem(
                 section = SettingsSection.UPDATES,
@@ -2200,3 +2217,624 @@ private fun AboutSection(
         }
     }
 }
+
+@Composable
+private fun IconsSection(settingsRepo: MetroSettingsRepository) {
+    val scheme = LocalMetroScheme.current
+    val context = LocalContext.current
+    val settings by settingsRepo.settings.collectAsState()
+
+    var iconPacks by remember { mutableStateOf<List<IconPackInfo>>(emptyList()) }
+    var isLoadingPacks by remember { mutableStateOf(true) }
+    val isIpsInstalled = remember { IconPackManager.isIconPackStudioInstalled(context) }
+
+    LaunchedEffect(Unit) {
+        iconPacks = IconPackManager.getInstalledIconPacks(context)
+        isLoadingPacks = false
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        // 1. Предпросмотр значков
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(scheme.glass)
+                    .border(1.dp, scheme.stroke, RoundedCornerShape(12.dp))
+                    .padding(16.dp),
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = "ПРЕДПРОСМОТР ЗНАЧКОВ",
+                        color = scheme.textDim,
+                        fontSize = 11.sp,
+                        fontFamily = MetroFonts.headline,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.sp,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val sampleSize = (44 * settings.tileIconScale).dp
+                        // Образец 1 (1x1 плитка)
+                        Box(
+                            modifier = Modifier
+                                .size(76.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(scheme.glassHover)
+                                .border(1.dp, scheme.stroke, RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(sampleSize.coerceAtMost(52.dp))
+                                        .then(IconShapeHelper.applyShape(Modifier, settings.iconShape))
+                                        .background(scheme.accent.copy(alpha = 0.85f)),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    MetroIcon(
+                                        icon = "\uf015",
+                                        color = Color.White,
+                                        fontSize = (18 * settings.tileIconScale).sp,
+                                    )
+                                }
+                                Spacer(Modifier.height(3.dp))
+                                Text(
+                                    text = "Дом",
+                                    color = scheme.text,
+                                    fontSize = 10.sp,
+                                    fontFamily = MetroFonts.text,
+                                )
+                            }
+                        }
+
+                        // Образец 2
+                        Box(
+                            modifier = Modifier
+                                .size(76.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(scheme.glassHover)
+                                .border(1.dp, scheme.stroke, RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(sampleSize.coerceAtMost(52.dp))
+                                        .then(IconShapeHelper.applyShape(Modifier, settings.iconShape))
+                                        .background(Color(0xFF2E7D32)),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    MetroIcon(
+                                        icon = "\uf095",
+                                        color = Color.White,
+                                        fontSize = (18 * settings.tileIconScale).sp,
+                                    )
+                                }
+                                Spacer(Modifier.height(3.dp))
+                                Text(
+                                    text = "Вызов",
+                                    color = scheme.text,
+                                    fontSize = 10.sp,
+                                    fontFamily = MetroFonts.text,
+                                )
+                            }
+                        }
+
+                        // Образец 3
+                        Box(
+                            modifier = Modifier
+                                .size(76.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(scheme.glassHover)
+                                .border(1.dp, scheme.stroke, RoundedCornerShape(10.dp)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(sampleSize.coerceAtMost(52.dp))
+                                        .then(IconShapeHelper.applyShape(Modifier, settings.iconShape))
+                                        .background(Color(0xFF1565C0)),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    MetroIcon(
+                                        icon = "\uf001",
+                                        color = Color.White,
+                                        fontSize = (18 * settings.tileIconScale).sp,
+                                    )
+                                }
+                                Spacer(Modifier.height(3.dp))
+                                Text(
+                                    text = "Музыка",
+                                    color = scheme.text,
+                                    fontSize = 10.sp,
+                                    fontFamily = MetroFonts.text,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Форма значков
+        item {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "ФОРМА ЗНАЧКОВ",
+                    color = scheme.textDim,
+                    fontSize = 12.sp,
+                    fontFamily = MetroFonts.headline,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.sp,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Применяется ко всем плиткам рабочего стола и списку приложений",
+                    color = scheme.textDim.copy(alpha = 0.75f),
+                    fontSize = 12.sp,
+                    fontFamily = MetroFonts.text,
+                )
+                Spacer(Modifier.height(10.dp))
+
+                val shapes = MetroIconShape.values()
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    items(shapes) { shapeItem ->
+                        val isSelected = settings.iconShape.equals(shapeItem.key, ignoreCase = true)
+                        Box(
+                            modifier = Modifier
+                                .size(width = 82.dp, height = 80.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isSelected) scheme.accent.copy(alpha = 0.18f) else scheme.glass)
+                                .border(
+                                    width = if (isSelected) 2.dp else 1.dp,
+                                    color = if (isSelected) scheme.accent else scheme.stroke,
+                                    shape = RoundedCornerShape(10.dp),
+                                )
+                                .metroClickable(
+                                    targetScale = 0.94f,
+                                    onClick = { settingsRepo.setIconShape(shapeItem.key) },
+                                )
+                                .padding(8.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .then(IconShapeHelper.applyShape(Modifier, shapeItem.key))
+                                        .background(if (isSelected) scheme.accent else scheme.textDim.copy(alpha = 0.35f)),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    MetroIcon(
+                                        icon = "\uf005",
+                                        color = if (isSelected) Color.White else scheme.textDim,
+                                        fontSize = 14.sp,
+                                    )
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = shapeItem.title,
+                                    color = if (isSelected) scheme.text else scheme.textDim,
+                                    fontSize = 11.sp,
+                                    fontFamily = MetroFonts.text,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Размер значков в плитках
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(scheme.glass)
+                    .border(1.dp, scheme.stroke, RoundedCornerShape(12.dp))
+                    .padding(16.dp),
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column {
+                            Text(
+                                text = "РАЗМЕР ЗНАЧКОВ В ПЛИТКАХ",
+                                color = scheme.text,
+                                fontSize = 13.sp,
+                                fontFamily = MetroFonts.headline,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = "Масштабирование иконок внутри плиток",
+                                color = scheme.textDim,
+                                fontSize = 11.sp,
+                                fontFamily = MetroFonts.text,
+                            )
+                        }
+                        Text(
+                            text = "${(settings.tileIconScale * 100).roundToInt()}%",
+                            color = scheme.accent,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = MetroFonts.headline,
+                        )
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Slider(
+                        value = settings.tileIconScale,
+                        onValueChange = { settingsRepo.setTileIconScale(it) },
+                        valueRange = 0.70f..1.30f,
+                        steps = 11,
+                        colors = SliderDefaults.colors(
+                            thumbColor = scheme.accent,
+                            activeTrackColor = scheme.accent,
+                            inactiveTrackColor = scheme.strokeStrong,
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    Spacer(Modifier.height(6.dp))
+
+                    // Быстрые пресеты размера
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf(0.85f to "85%", 1.0f to "100%", 1.15f to "115%", 1.30f to "130%").forEach { (scaleVal, title) ->
+                            val isSel = kotlin.math.abs(settings.tileIconScale - scaleVal) < 0.03f
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSel) scheme.accent.copy(alpha = 0.20f) else scheme.glassHover)
+                                    .border(
+                                        1.dp,
+                                        if (isSel) scheme.accent else scheme.stroke,
+                                        RoundedCornerShape(6.dp),
+                                    )
+                                    .metroClickable(
+                                        targetScale = 0.94f,
+                                        onClick = { settingsRepo.setTileIconScale(scaleVal) },
+                                    )
+                                    .padding(vertical = 7.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = title,
+                                    color = if (isSel) scheme.accent else scheme.textDim,
+                                    fontSize = 12.sp,
+                                    fontFamily = MetroFonts.text,
+                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Меню приложений: режим английского алфавита
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(scheme.glass)
+                    .border(1.dp, scheme.stroke, RoundedCornerShape(12.dp))
+                    .padding(16.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Только английский алфавит",
+                            color = scheme.text,
+                            fontSize = 14.sp,
+                            fontFamily = MetroFonts.headline,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = "Сортировка русских приложений по английским буквам (Календарь → K, Черновики → C, Сбербанк → S). В быстром переходе остаются только A–Z и #.",
+                            color = scheme.textDim,
+                            fontSize = 12.sp,
+                            fontFamily = MetroFonts.text,
+                            lineHeight = 16.sp,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(
+                        checked = settings.drawerEnglishAlphabet,
+                        onCheckedChange = { settingsRepo.setDrawerEnglishAlphabet(it) },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = scheme.accent,
+                            uncheckedThumbColor = scheme.textDim,
+                            uncheckedTrackColor = scheme.glassHover,
+                        ),
+                    )
+                }
+            }
+        }
+
+        // 5. Пакеты значков (Icon Pack Studio & стандартные)
+        item {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "ПАКЕТЫ ЗНАЧКОВ (ICON PACKS)",
+                    color = scheme.textDim,
+                    fontSize = 12.sp,
+                    fontFamily = MetroFonts.headline,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.sp,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Поддержка Icon Pack Studio и любых наборов иконок (ADW, Nova, Lawnchair)",
+                    color = scheme.textDim.copy(alpha = 0.75f),
+                    fontSize = 12.sp,
+                    fontFamily = MetroFonts.text,
+                )
+                Spacer(Modifier.height(10.dp))
+
+                // Кнопка Icon Pack Studio
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(scheme.accent.copy(alpha = 0.12f))
+                        .border(1.dp, scheme.accent.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                        .metroClickable(
+                            targetScale = 0.97f,
+                            onClick = {
+                                if (isIpsInstalled) {
+                                    val launch = context.packageManager.getLaunchIntentForPackage("ginlemon.iconpackstudio")
+                                    if (launch != null) {
+                                        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        context.startActivity(launch)
+                                    }
+                                } else {
+                                    try {
+                                        val marketIntent = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=ginlemon.iconpackstudio"))
+                                        marketIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        context.startActivity(marketIntent)
+                                    } catch (_: Exception) {
+                                        val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=ginlemon.iconpackstudio"))
+                                        webIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        context.startActivity(webIntent)
+                                    }
+                                }
+                            },
+                        )
+                        .padding(14.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(scheme.accent.copy(alpha = 0.25f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            MetroIcon(
+                                icon = "\uf0d0",
+                                color = scheme.accent,
+                                fontSize = 16.sp,
+                            )
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isIpsInstalled) "Создать значки в Icon Pack Studio" else "Установить Icon Pack Studio",
+                                color = scheme.text,
+                                fontSize = 13.sp,
+                                fontFamily = MetroFonts.headline,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                text = if (isIpsInstalled) "Экспортируйте созданные темы — они сразу появятся в списке ниже" else "Генератор уникальных иконок и адаптивных паков",
+                                color = scheme.textDim,
+                                fontSize = 11.sp,
+                                fontFamily = MetroFonts.text,
+                            )
+                        }
+                        MetroIcon(
+                            icon = "\uf061",
+                            color = scheme.accent,
+                            fontSize = 14.sp,
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+
+                // Список пакетов
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(scheme.glass)
+                        .border(1.dp, scheme.stroke, RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    // Вариант 1: Системные по умолчанию
+                    val isSystemSelected = settings.activeIconPack.isBlank()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSystemSelected) scheme.accent.copy(alpha = 0.15f) else scheme.glassHover)
+                            .border(
+                                1.dp,
+                                if (isSystemSelected) scheme.accent.copy(alpha = 0.6f) else scheme.stroke,
+                                RoundedCornerShape(8.dp),
+                            )
+                            .metroClickable(
+                                targetScale = 0.98f,
+                                onClick = { settingsRepo.setActiveIconPack("") },
+                            )
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clip(CircleShape)
+                                .border(2.dp, if (isSystemSelected) scheme.accent else scheme.textDim, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            if (isSystemSelected) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(scheme.accent),
+                                )
+                            }
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "По умолчанию (Системные значки)",
+                                color = scheme.text,
+                                fontSize = 13.sp,
+                                fontFamily = MetroFonts.text,
+                                fontWeight = if (isSystemSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            )
+                            Text(
+                                text = "Оригинальные иконки установленных приложений",
+                                color = scheme.textDim,
+                                fontSize = 11.sp,
+                                fontFamily = MetroFonts.text,
+                            )
+                        }
+                    }
+
+                    // Список установленных пакетов
+                    if (iconPacks.isEmpty() && !isLoadingPacks) {
+                        Text(
+                            text = "Сторонние пакеты иконок не обнаружены на устройстве. Установите любой Icon Pack из Google Play или экспортируйте тему из Icon Pack Studio.",
+                            color = scheme.textDim,
+                            fontSize = 11.sp,
+                            fontFamily = MetroFonts.text,
+                            modifier = Modifier.padding(8.dp),
+                        )
+                    } else {
+                        iconPacks.forEach { pack ->
+                            val isPackSelected = settings.activeIconPack == pack.packageName
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isPackSelected) scheme.accent.copy(alpha = 0.15f) else scheme.glassHover)
+                                    .border(
+                                        1.dp,
+                                        if (isPackSelected) scheme.accent.copy(alpha = 0.6f) else scheme.stroke,
+                                        RoundedCornerShape(8.dp),
+                                    )
+                                    .metroClickable(
+                                        targetScale = 0.98f,
+                                        onClick = { settingsRepo.setActiveIconPack(pack.packageName) },
+                                    )
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .clip(CircleShape)
+                                        .border(2.dp, if (isPackSelected) scheme.accent else scheme.textDim, CircleShape),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (isPackSelected) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(10.dp)
+                                                .clip(CircleShape)
+                                                .background(scheme.accent),
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = pack.name,
+                                            color = scheme.text,
+                                            fontSize = 13.sp,
+                                            fontFamily = MetroFonts.text,
+                                            fontWeight = if (isPackSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                        )
+                                        if (pack.isIconPackStudio) {
+                                            Spacer(Modifier.width(6.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(4.dp))
+                                                    .background(scheme.accent.copy(alpha = 0.25f))
+                                                    .padding(horizontal = 5.dp, vertical = 2.dp),
+                                            ) {
+                                                Text(
+                                                    text = "IPS",
+                                                    color = scheme.accent,
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Text(
+                                        text = pack.packageName,
+                                        color = scheme.textDim,
+                                        fontSize = 11.sp,
+                                        fontFamily = MetroFonts.text,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+

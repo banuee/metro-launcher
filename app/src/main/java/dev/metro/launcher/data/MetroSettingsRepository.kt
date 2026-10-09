@@ -38,6 +38,10 @@ data class MetroSettings(
     val autoUpdateIntervalMinutes: Int = 0, // 0 = никогда, 10, 30, 60, 180, 360, 720, 1440
     val lastNotifiedVersion: String = "",
     val unlockAnimationEnabled: Boolean = true,
+    val tileIconScale: Float = 1.0f,
+    val iconShape: String = "DEFAULT",
+    val drawerEnglishAlphabet: Boolean = false,
+    val activeIconPack: String = "",
 )
 
 class MetroSettingsRepository(private val context: Context) {
@@ -56,6 +60,10 @@ class MetroSettingsRepository(private val context: Context) {
         private val KEY_AUTO_UPDATE_INTERVAL = intPreferencesKey("auto_update_interval")
         private val KEY_LAST_NOTIFIED_VERSION = stringPreferencesKey("last_notified_version")
         private val KEY_UNLOCK_ANIMATION = booleanPreferencesKey("unlock_animation_enabled")
+        private val KEY_TILE_ICON_SCALE = floatPreferencesKey("tile_icon_scale")
+        private val KEY_ICON_SHAPE = stringPreferencesKey("icon_shape")
+        private val KEY_DRAWER_ENGLISH_ALPHABET = booleanPreferencesKey("drawer_english_alphabet")
+        private val KEY_ACTIVE_ICON_PACK = stringPreferencesKey("active_icon_pack")
 
         val DEFAULT = MetroSettings()
     }
@@ -85,6 +93,10 @@ class MetroSettingsRepository(private val context: Context) {
             autoUpdateIntervalMinutes = prefs[KEY_AUTO_UPDATE_INTERVAL] ?: 0,
             lastNotifiedVersion = prefs[KEY_LAST_NOTIFIED_VERSION] ?: "",
             unlockAnimationEnabled = prefs[KEY_UNLOCK_ANIMATION] ?: true,
+            tileIconScale = prefs[KEY_TILE_ICON_SCALE] ?: 1.0f,
+            iconShape = prefs[KEY_ICON_SHAPE] ?: "DEFAULT",
+            drawerEnglishAlphabet = prefs[KEY_DRAWER_ENGLISH_ALPHABET] ?: false,
+            activeIconPack = prefs[KEY_ACTIVE_ICON_PACK] ?: "",
         )
     }
 
@@ -214,6 +226,41 @@ class MetroSettingsRepository(private val context: Context) {
         }
     }
 
+    fun setTileIconScale(scale: Float) {
+        val clamped = scale.coerceIn(0.70f, 1.30f)
+        scope.launch {
+            context.settingsStore.edit { prefs ->
+                prefs[KEY_TILE_ICON_SCALE] = clamped
+            }
+        }
+    }
+
+    fun setIconShape(shape: String) {
+        scope.launch {
+            context.settingsStore.edit { prefs ->
+                prefs[KEY_ICON_SHAPE] = shape
+            }
+        }
+    }
+
+    fun setDrawerEnglishAlphabet(enabled: Boolean) {
+        scope.launch {
+            context.settingsStore.edit { prefs ->
+                prefs[KEY_DRAWER_ENGLISH_ALPHABET] = enabled
+            }
+        }
+    }
+
+    fun setActiveIconPack(packPackage: String) {
+        scope.launch {
+            context.settingsStore.edit { prefs ->
+                prefs[KEY_ACTIVE_ICON_PACK] = packPackage
+            }
+            IconPackManager.loadIconPack(context, packPackage)
+            AppIconLoader.evictAll()
+        }
+    }
+
     suspend fun restoreSettings(newSettings: MetroSettings) {
         context.settingsStore.edit { prefs ->
             if (newSettings.accentColor != null) {
@@ -233,6 +280,10 @@ class MetroSettingsRepository(private val context: Context) {
             prefs[KEY_AUTO_UPDATE_INTERVAL] = newSettings.autoUpdateIntervalMinutes
             prefs[KEY_LAST_NOTIFIED_VERSION] = newSettings.lastNotifiedVersion
             prefs[KEY_UNLOCK_ANIMATION] = newSettings.unlockAnimationEnabled
+            prefs[KEY_TILE_ICON_SCALE] = newSettings.tileIconScale
+            prefs[KEY_ICON_SHAPE] = newSettings.iconShape
+            prefs[KEY_DRAWER_ENGLISH_ALPHABET] = newSettings.drawerEnglishAlphabet
+            prefs[KEY_ACTIVE_ICON_PACK] = newSettings.activeIconPack
         }
     }
 

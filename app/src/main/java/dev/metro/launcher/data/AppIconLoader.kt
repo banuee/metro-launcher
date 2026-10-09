@@ -92,6 +92,13 @@ object AppIconLoader {
             }
             return customBmp
         }
+        val iconPackBmp = appContext?.let { IconPackManager.loadIcon(it, packageName) }
+        if (iconPackBmp != null) {
+            synchronized(lock) {
+                appCache.put(key, iconPackBmp)
+            }
+            return iconPackBmp
+        }
         val icon = app?.icon
         if (icon != null) {
             val bmp = runCatching { icon.toImageBitmap(APP_ICON_SIZE) }.getOrNull()
@@ -269,6 +276,15 @@ object AppIconLoader {
                 }
                 return
             }
+            val iconPackIcon = appContext?.let { IconPackManager.loadIcon(it, app.packageName) }
+            if (iconPackIcon != null) {
+                synchronized(lock) {
+                    if (version == versionTokenLocked(key)) {
+                        appCache.put(key, iconPackIcon)
+                    }
+                }
+                return
+            }
             if (app.icon != defaultIcon) {
                 val bitmap = try {
                     app.icon.toImageBitmap(APP_ICON_SIZE)
@@ -320,6 +336,28 @@ object AppIconLoader {
                     return@withContext LoadedApp(
                         appInfo = appInfo,
                         icon = customBmp,
+                        isDefaultIcon = false,
+                        cacheable = true,
+                    )
+                }
+                val iconPackBmp = IconPackManager.loadIcon(appContext, packageName)
+                if (iconPackBmp != null) {
+                    val customLabel = AppCustomizationRepository.getInstance(appContext).getCustomLabel(packageName)
+                    val label = customLabel ?: fallbackApp?.label ?: try {
+                        val applicationInfo = appContext.packageManager.getApplicationInfo(packageName, 0)
+                        appContext.packageManager.getApplicationLabel(applicationInfo).toString()
+                    } catch (_: Exception) {
+                        packageName
+                    }
+                    val appInfo = fallbackApp?.copy(label = label)
+                        ?: AppInfo(
+                            label = label,
+                            packageName = packageName,
+                            icon = appContext.packageManager.defaultActivityIcon,
+                        )
+                    return@withContext LoadedApp(
+                        appInfo = appInfo,
+                        icon = iconPackBmp,
                         isDefaultIcon = false,
                         cacheable = true,
                     )

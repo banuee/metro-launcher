@@ -54,6 +54,9 @@ data class MetroScheme(
 val LocalMetroScheme: ProvidableCompositionLocal<MetroScheme> =
     compositionLocalOf { MetroScheme(accent = MetroDefaults.accentFallback) }
 
+val LocalMetroSettings: ProvidableCompositionLocal<dev.metro.launcher.data.MetroSettings> =
+    compositionLocalOf { dev.metro.launcher.data.MetroSettingsRepository.DEFAULT }
+
 object MetroDefaults {
     /** Дефолт как в quickshell: teal #00aba9, пока не пришел цвет обоев. */
     val accentFallback = Color(0xFF00ABA9)
@@ -127,6 +130,7 @@ fun MetroTheme(
     )
     androidx.compose.runtime.CompositionLocalProvider(
         LocalMetroScheme provides scheme,
+        LocalMetroSettings provides settings,
     ) {
         // Segoe UI глобально: все M3-тексты (диалоги, поля, кнопки) — нашим шрифтом.
         androidx.compose.material3.MaterialTheme(

@@ -247,6 +247,10 @@ class MainActivity : ComponentActivity() {
                     if (s.autoUpdateIntervalMinutes > 0) {
                         AutoUpdateManager.schedule(context, s.autoUpdateIntervalMinutes)
                     }
+                    if (s.activeIconPack.isNotBlank()) {
+                        dev.metro.launcher.data.IconPackManager.loadIconPack(context, s.activeIconPack)
+                        dev.metro.launcher.data.AppIconLoader.evictAll()
+                    }
                 }
 
                 val drawerListState = rememberLazyListState()
