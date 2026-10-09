@@ -155,19 +155,19 @@ fun AppContextMenu(
             modifier = Modifier
                 .graphicsLayer {
                     val p = anim.value
-                    scaleX = 0.75f + 0.25f * p
-                    scaleY = 0.75f + 0.25f * p
+                    scaleX = 0.70f + 0.30f * p
+                    scaleY = 0.70f + 0.30f * p
                     alpha = p.coerceIn(0f, 1f)
                     translationY = (1f - p) * slidePx
                 }
                 .widthIn(min = 260.dp, max = 310.dp)
                 .shadow(elevation = 16.dp, shape = RoundedCornerShape(MetroDimens.panelRadius)),
             shape = MetroDimens.panelRadius,
-            tint = Color(0xFF141414).copy(alpha = 0.94f),
+            tint = scheme.glassDeep,
             borderColor = scheme.strokeStrong,
             borderWidth = 1.dp,
         ) {
-            // Тонкий акцентный блик сверху
+            // Тонкий акцентный блик сверху как в quickshell metro-shot
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -189,11 +189,18 @@ fun AppContextMenu(
                     .fillMaxWidth()
                     .padding(14.dp),
             ) {
-                // Шапка приложения: иконка + имя + package
+                // Шапка приложения: акцентная полоска + иконка + имя + package
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(bottom = 8.dp),
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 3.dp, height = 24.dp)
+                            .clip(RoundedCornerShape(percent = 50))
+                            .background(scheme.accent),
+                    )
+                    Spacer(Modifier.width(8.dp))
                     bitmap?.let { icon ->
                         ComposeImage(
                             bitmap = icon,

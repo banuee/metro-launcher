@@ -119,6 +119,21 @@ object AppIconLoader {
         return loaded?.icon ?: cachedAppIcon(packageName, fallbackApp)
     }
 
+    suspend fun loadOriginalAppIcon(
+        context: Context,
+        packageName: String,
+        fallbackApp: AppInfo? = null,
+    ): ImageBitmap? = withContext(Dispatchers.IO) {
+        val pm = context.packageManager
+        val drawable = try {
+            val ai = pm.getApplicationInfo(packageName, 0)
+            pm.getApplicationIcon(ai)
+        } catch (_: Exception) {
+            fallbackApp?.icon ?: pm.defaultActivityIcon
+        }
+        runCatching { drawable.toImageBitmap(APP_ICON_SIZE) }.getOrNull()
+    }
+
     suspend fun loadAppInfo(context: Context, packageName: String): AppInfo? = loadApp(
         context = context,
         packageName = packageName,

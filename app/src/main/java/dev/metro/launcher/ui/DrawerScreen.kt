@@ -281,12 +281,20 @@ fun DrawerScreen(
                 onUninstall = {
                     selectedAppForMenu = null
                     try {
-                        val intent = Intent(Intent.ACTION_DELETE).apply {
-                            data = Uri.parse("package:${targetApp.packageName}")
+                        val packageUri = Uri.parse("package:${targetApp.packageName}")
+                        val intent = Intent(Intent.ACTION_UNINSTALL_PACKAGE, packageUri).apply {
+                            putExtra(Intent.EXTRA_RETURN_RESULT, true)
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                         context.startActivity(intent)
-                    } catch (_: Exception) {}
+                    } catch (_: Exception) {
+                        try {
+                            val fallbackIntent = Intent(Intent.ACTION_DELETE, Uri.parse("package:${targetApp.packageName}")).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(fallbackIntent)
+                        } catch (_: Exception) {}
+                    }
                 },
                 onDismiss = {
                     selectedAppForMenu = null

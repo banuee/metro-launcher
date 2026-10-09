@@ -50,6 +50,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -139,14 +140,14 @@ fun AppEditDialog(
     var selectedGlyph by remember { mutableStateOf<String?>(null) }
     var focused by remember { mutableStateOf(false) }
 
-    // Загрузка дефолтной иконки для превью, если кастомная не выбрана
+    // Загрузка дефолтной иконки для превью, если кастомная не выбрана (загружаем именно оригинальную системную иконку)
     val iconRevision by AppIconLoader.revisions.collectAsState()
-    val systemBitmap by produceState(
-        initialValue = AppIconLoader.cachedAppIcon(app.packageName, app),
+    val systemBitmap by produceState<ImageBitmap?>(
+        initialValue = null,
         app.packageName,
         iconRevision,
     ) {
-        value = AppIconLoader.loadAppIcon(context, app.packageName, app)
+        value = AppIconLoader.loadOriginalAppIcon(context, app.packageName, app)
     }
 
     // Фото-пикер для выбора пользовательской картинки из галереи
